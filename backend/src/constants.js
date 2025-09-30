@@ -1,3 +1,1 @@
-const DB_NAME = "alchemist";
-
-export { DB_NAME };
+export const DB_NAME = process.env.DB_NAME || "elixirtrack";
