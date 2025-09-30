@@ -60,10 +60,14 @@ const getDoseLogsBySchedule = asyncHandler(async (req, res) => {
 
 // Get todays dose logs
 const getTodaysDoseLogs = asyncHandler(async (req, res) => {
-  const today = new Date();
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+
   const logs = await DoseLog.find({
     userId: req.user._id,
-    today
+    scheduledFor: { $gte: start, $lte: end }
   });
   return res.json(new ApiResponse(200, logs, "Today's dose logs retrieved successfully"));
 });
