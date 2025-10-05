@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Plus, Calendar, TrendingUp, Pill } from "lucide-react";
-import { useMedicines } from "../hooks/useMedicines";
-import { useDoses } from "../hooks/useDoses";
+import useMedicineStore from "../hooks/useMedicineStore";
+import useDoseStore from "../hooks/useDoseStore";
 import { statsApi } from "../services/api";
 import { Sidebar } from "../components/Sidebar";
 import { MedicineCard } from "../components/MedicineCard";
@@ -17,10 +17,16 @@ import { useNavigate } from "react-router-dom";
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const { medicines, isLoading: medicinesLoading } = useMedicines();
-  const { upcomingDoses, markAsTaken, markAsSkipped, isLoading: dosesLoading } = useDoses();
+  const { medicines, isLoading: medicinesLoading, fetchMedicines } = useMedicineStore();
+  const { upcomingDoses, markAsTaken, markAsSkipped, isLoading: dosesLoading, fetchDoses } = useDoseStore();
   const [adherenceStats, setAdherenceStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
+
+  // Fetch data once on mount
+  useEffect(() => {
+    fetchMedicines();
+    fetchDoses();
+  }, []);
 
   useEffect(() => {
     const fetchStats = async () => {

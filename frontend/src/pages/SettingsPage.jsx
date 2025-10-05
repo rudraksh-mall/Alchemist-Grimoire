@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   Settings, 
@@ -13,7 +14,7 @@ import {
   Save,
   Trash2
 } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
+import useAuthStore from '../hooks/useAuthStore';
 import { Sidebar } from '../components/Sidebar';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -26,9 +27,15 @@ import { Alert, AlertDescription } from '../components/ui/alert';
 import { toast } from 'sonner';
 
 export function SettingsPage() {
-  const { user, logout } = useAuth();
+  const { user, logout } = useAuthStore();
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!user) navigate('/login');
+  }, [user]);
   
   const [settings, setSettings] = useState({
     name: user?.name || '',

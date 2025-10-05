@@ -61,7 +61,7 @@ const registerUser = asyncHandler(async (req, res) => {
       secure: process.env.NODE_ENV === "production",
     })
     .status(201)
-    .json({ user: createdUser, token: accessToken });
+    .json({ user: createdUser, accessToken });
 });
 
 // Login User

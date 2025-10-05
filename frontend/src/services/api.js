@@ -273,8 +273,8 @@ export const authApi = {
       { withCredentials: true }
     );
     return {
-      user: data.data.user,
-      accessToken: data.data.accessToken,
+      user: data.user,
+      accessToken: data.accessToken,
     };
   },
   login: async (email, password) => {

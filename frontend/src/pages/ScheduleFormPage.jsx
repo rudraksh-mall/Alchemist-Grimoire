@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Pill, Clock, Calendar, Palette, Save } from 'lucide-react';
-import { useMedicines } from '../hooks/useMedicines';
+import useMedicineStore from '../hooks/useMedicineStore';
 import { Sidebar } from '../components/Sidebar';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -30,9 +30,13 @@ const COLOR_OPTIONS = [
 export function ScheduleFormPage() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { medicines, createMedicine, updateMedicine } = useMedicines();
+  const { medicines, createMedicine, updateMedicine, fetchMedicines } = useMedicineStore();
   const [isLoading, setIsLoading] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
+
+  useEffect(() => {
+    fetchMedicines(); // fetch only once on mount
+  }, []);
   
   const [formData, setFormData] = useState({
     name: '',
