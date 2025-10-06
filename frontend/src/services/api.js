@@ -138,91 +138,78 @@ const mockAdherenceStats = {
 
 // API Functions
 
+// Replace the entire 'export const medicineApi' block with this real implementation:
+
 export const medicineApi = {
-  // GET /api/medicines
+  // GET /api/medications - Fetches all schedules for the logged-in user
   getAll: async () => {
-    await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate API delay
-    return mockMedicines;
+    const response = await api.get("/v1/medications"); // Assuming Express route is /medication
+    return response.data.data; // Assuming Express returns { data: [...] }
   },
 
-  // GET /api/medicines/:id
+  // GET /api/medications/:id - Fetches a single schedule
   getById: async (id) => {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    return mockMedicines.find((m) => m.id === id) || null;
+    const response = await api.get(`/v1/medications/${id}`);
+    return response.data.data;
   },
 
-  // POST /api/medicines
+  // POST /api/medications - Creates a new schedule
   create: async (medicine) => {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    const newMedicine = { ...medicine, id: Date.now().toString() };
-    mockMedicines.push(newMedicine);
-    return newMedicine;
+    const response = await api.post("/v1/medications", medicine);
+    return response.data.data;
   },
 
-  // PUT /api/medicines/:id
+  // PUT /api/medications/:id - Updates an existing schedule
   update: async (id, medicine) => {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    const index = mockMedicines.findIndex((m) => m.id === id);
-    if (index !== -1) {
-      mockMedicines[index] = { ...mockMedicines[index], ...medicine };
-      return mockMedicines[index];
-    }
-    throw new Error("Medicine not found");
+    const response = await api.put(`/v1/medications/${id}`, medicine);
+    return response.data.data;
   },
 
-  // DELETE /api/medicines/:id
+  // DELETE /api/medications/:id - Deletes a schedule
   delete: async (id) => {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    const index = mockMedicines.findIndex((m) => m.id === id);
-    if (index !== -1) {
-      mockMedicines.splice(index, 1);
-    }
+    await api.delete(`/v1/medications/${id}`);
+    // No return needed on success
   },
 };
+
+// services/api.js (Replace the existing doseApi block)
+
+// services/api.js (Update the doseApi block)
 
 export const doseApi = {
-  // GET /api/doses
-  getAll: async () => {
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    return mockDoses;
-  },
-
-  // GET /api/doses/upcoming
+  // GET Upcoming: Matches backend route: router.get("/today", getTodaysDoseLogs)
   getUpcoming: async () => {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    return mockDoses.filter((d) => d.status === "pending");
+    const response = await api.get("/v1/dose-logs/today");
+    return response.data.data;
   },
 
-  // POST /api/doses/:id/take
-  markAsTaken: async (id, actualTime) => {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    const dose = mockDoses.find((d) => d.id === id);
-    if (dose) {
-      dose.status = "taken";
-      dose.actualTime = actualTime || new Date().toISOString();
-      return dose;
-    }
-    throw new Error("Dose not found");
+  // NOTE: Your backend uses PUT for updates, which is perfect for marking doses.
+  // We will pass the action (taken/skipped) in the body.
+  markAsTaken: async (logId, actualTime) => {
+    const response = await api.put(`/v1/dose-logs/${logId}`, {
+      status: "taken",
+      actualTime: actualTime || new Date().toISOString(),
+    });
+    return response.data.data;
   },
 
-  // POST /api/doses/:id/skip
-  markAsSkipped: async (id, notes) => {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    const dose = mockDoses.find((d) => d.id === id);
-    if (dose) {
-      dose.status = "skipped";
-      dose.notes = notes;
-      return dose;
-    }
-    throw new Error("Dose not found");
+  markAsSkipped: async (logId, notes = "") => {
+    const response = await api.put(`/v1/dose-logs/${logId}`, {
+      status: "skipped",
+      notes: notes,
+    });
+    return response.data.data;
   },
 };
 
+// services/api.js (Replace the existing statsApi block)
+
 export const statsApi = {
-  // GET /api/stats/adherence
+  // GET /api/v1/dose-logs/stats - Fetches adherence percentages and trends
   getAdherence: async () => {
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    return mockAdherenceStats;
+    // Assuming your backend has a route like router.get("/stats", ...) mounted on dose-logs
+    const response = await api.get("/v1/dose-logs/stats");
+    return response.data.data;
   },
 };
 

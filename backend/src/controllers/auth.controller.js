@@ -10,8 +10,12 @@ const generateAccessAndRefreshTokens = async (userId) => {
     const user = await User.findById(userId);
     console.log("User fetched:", user);
 
-    if (!user)
-      throw new ApiError(404, "User not found while generating tokens");
+    if (!user) {
+      throw new ApiError(
+        500,
+        "User not found for token generation, please re-login."
+      );
+    }
 
     const accessToken = user.generateAccessToken();
     const refreshToken = user.generateRefreshToken();
@@ -143,9 +147,12 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     throw new ApiError(401, "Invalid refresh token");
   }
   const user = await User.findById(decodedToken._id);
-  if (!user || incomingRefreshToken !== user.refreshToken)
-    throw new ApiError(401, "Refresh token invalid or expired");
 
+  // 🎯 FIX: Combined check to prevent access to user.refreshToken if user is null 🎯
+  if (!user || incomingRefreshToken !== user.refreshToken) {
+    // If user is null (not found) OR tokens don't match (revoked)
+    throw new ApiError(401, "Refresh token invalid or expired");
+  }
   const { accessToken, refreshToken: newRefreshToken } =
     await generateAccessAndRefreshTokens(user._id);
 
