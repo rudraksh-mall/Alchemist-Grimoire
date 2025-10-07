@@ -2,6 +2,8 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/user.model.js";
+import { oauth2Client, SCOPES } from "../utils/googleAuth.js";
+import { StatusCodes } from "http-status-codes";
 import jwt from "jsonwebtoken";
 
 // REVISED: generateAccessAndRefreshTokens (backend/src/controllers/auth.controller.js)
@@ -188,6 +190,74 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, updatedUser, "Profile updated successfully"));
 });
 
+// In backend/src/controllers/auth.controller.js
+
+// REVISED: googleAuthLogin (Temporarily adapted for unauthenticated GET request)
+// backend/src/controllers/auth.controller.js (Modification)
+
+const googleAuthLogin = (req, res) => {
+  // 🎯 FIX: Get userId from query param (sent by the frontend) instead of req.user._id
+  const userId = req.query.userId;
+
+  if (!userId) {
+    return res.status(400).send("User ID is required to initiate OAuth.");
+  }
+
+  // Generate the URL, passing the userId via the state parameter
+  const authUrl = oauth2Client.generateAuthUrl({
+    access_type: "offline",
+    scope: SCOPES,
+    include_granted_scopes: true,
+    state: userId, // The state parameter securely carries the ID to the callback
+  });
+
+  res.redirect(authUrl);
+};
+
+// NEW FUNCTION: Google Callback (Handles token exchange)
+// Mapped to: GET /api/v1/auth/google/callback
+// ----------------------------------------------------------------------
+const googleAuthCallback = asyncHandler(async (req, res) => {
+  const { code, state: userId } = req.query; // Get the auth code and the user ID we sent earlier
+
+  // 🎯 NOTE: Assuming your frontend is running on localhost:5173
+  const FRONTEND_SETTINGS_URL = process.env.CORS_ORIGIN + "/settings";
+
+  if (!code || !userId) {
+    return res.redirect(FRONTEND_SETTINGS_URL + "?error=auth_failed");
+  }
+
+  try {
+    // 1. Exchange the authorization code for tokens
+    const { tokens } = await oauth2Client.getToken(code);
+
+    // 2. Check for the Refresh Token (Indicates successful grant of offline access)
+    const refreshToken = tokens.refresh_token;
+
+    if (!refreshToken) {
+      // If no refresh token, the user needs to reconnect or manually grant access
+      return res.redirect(FRONTEND_SETTINGS_URL + "?error=no_refresh_token");
+    }
+
+    // 3. Save the refresh token to the User model
+    // We only save the long-lived refresh token; the short-lived access token will be handled by googleapis.
+    await User.findByIdAndUpdate(
+      userId,
+      {
+        googleRefreshToken: refreshToken,
+      },
+      { new: true }
+    );
+
+    // Success! Redirect the user back to the settings page
+    res.redirect(FRONTEND_SETTINGS_URL + "?success=calendar_connected");
+  } catch (error) {
+    console.error("Error exchanging Google token:", error);
+    // Redirect to settings with a generic error message
+    res.redirect(FRONTEND_SETTINGS_URL + "?error=failed_connection");
+  }
+});
+
 export {
   registerUser,
   loginUser,
@@ -195,4 +265,6 @@ export {
   refreshAccessToken,
   getCurrentUser,
   updateAccountDetails,
+  googleAuthCallback,
+  googleAuthLogin,
 };
