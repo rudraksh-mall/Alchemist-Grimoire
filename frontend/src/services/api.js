@@ -138,8 +138,6 @@ const mockAdherenceStats = {
 
 // API Functions
 
-// Replace the entire 'export const medicineApi' block with this real implementation:
-
 export const medicineApi = {
   // GET /api/medications - Fetches all schedules for the logged-in user
   getAll: async () => {
@@ -172,11 +170,20 @@ export const medicineApi = {
   },
 };
 
-// services/api.js (Replace the existing doseApi block)
-
-// services/api.js (Update the doseApi block)
-
 export const doseApi = {
+  // 🎯 FIX: Added try/catch to gracefully handle the missing backend route (404)
+  getAll: async () => {
+    try {
+      const response = await api.get("/v1/dose-logs/all");
+      return response.data.data;
+    } catch (error) {
+      // If the route is not found (404) or any other error occurs, return an empty array
+      // This prevents the Promise.all chain from failing and blocking getUpcoming()
+      console.error("[Dose API] /v1/dose-logs/all failed (404 expected):", error.message);
+      return []; 
+    }
+  },
+  
   // GET Upcoming: Matches backend route: router.get("/today", getTodaysDoseLogs)
   getUpcoming: async () => {
     const response = await api.get("/v1/dose-logs/today");
@@ -202,8 +209,6 @@ export const doseApi = {
   },
 };
 
-// services/api.js (Replace the existing statsApi block)
-
 export const statsApi = {
   // GET /api/v1/dose-logs/stats - Fetches adherence percentages and trends
   getAdherence: async () => {
@@ -221,7 +226,6 @@ export const chatApi = {
   },
 };
 
-// api.js
 export const authApi = {
   register: async (email, password, fullName) => {
     const { data } = await api.post(

@@ -31,21 +31,29 @@ export function DoseCard({ dose, onTake, onSkip, onSnooze, showActions = true })
     }
   };
 
-  const formatTime = (timeString) => {
-    return new Date(timeString).toLocaleTimeString('en-US', {
+  const formatTime = (dateString) => {
+    // FIX: Add timeZone: 'UTC' to display the time exactly as stored (e.g., 9:00 PM for 21:00Z)
+    return new Date(dateString).toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
-      hour12: true
+      hour12: true,
+      timeZone: 'UTC' 
     });
   };
 
-  const formatDate = (timeString) => {
-    return new Date(timeString).toLocaleDateString('en-US', {
+  const formatDate = (dateString) => {
+    // FIX: Add timeZone: 'UTC' to display the date exactly as stored (Oct 7)
+    return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
+      timeZone: 'UTC' 
     });
   };
 
+  // Ensure dose object and scheduleId are valid before accessing properties
+  const medicineName = dose.scheduleId?.name || dose.medicineName || 'Unknown Potion';
+  const dosage = dose.scheduleId?.dosage || dose.dosage || 'N/A';
+  
   return (
     <motion.div
       initial={{ opacity: 0, x: -20 }}
@@ -60,10 +68,10 @@ export function DoseCard({ dose, onTake, onSkip, onSnooze, showActions = true })
               {getStatusIcon()}
               <div>
                 <h4 className="font-medium text-card-foreground">
-                  {dose.medicineName}
+                  {medicineName} 
                 </h4>
                 <p className="text-sm text-muted-foreground">
-                  {dose.dosage}
+                  {dosage}
                 </p>
               </div>
             </div>
@@ -76,10 +84,12 @@ export function DoseCard({ dose, onTake, onSkip, onSnooze, showActions = true })
             <div className="flex items-center space-x-4 text-sm text-muted-foreground">
               <div className="flex items-center space-x-1">
                 <Clock className="w-3 h-3" />
-                <span>{formatTime(dose.scheduledTime)}</span>
+                {/* FIX: Use dose.scheduledFor and UTC timezone */}
+                <span>{formatTime(dose.scheduledFor)}</span>
               </div>
               <span>•</span>
-              <span>{formatDate(dose.scheduledTime)}</span>
+              {/* FIX: Use dose.scheduledFor and UTC timezone */}
+              <span>{formatDate(dose.scheduledFor)}</span>
             </div>
           </div>
 
@@ -100,7 +110,7 @@ export function DoseCard({ dose, onTake, onSkip, onSnooze, showActions = true })
               <Button
                 size="sm"
                 className="flex-1 h-8 magical-glow"
-                onClick={() => onTake?.(dose.id)}
+                onClick={() => onTake?.(dose._id)} // Using dose._id if using Mongoose object
               >
                 <Check className="w-3 h-3 mr-1" />
                 Take
@@ -109,7 +119,7 @@ export function DoseCard({ dose, onTake, onSkip, onSnooze, showActions = true })
                 size="sm"
                 variant="outline"
                 className="h-8"
-                onClick={() => onSnooze?.(dose.id)}
+                onClick={() => onSnooze?.(dose._id)} // Using dose._id
               >
                 <Pause className="w-3 h-3" />
               </Button>
@@ -117,7 +127,7 @@ export function DoseCard({ dose, onTake, onSkip, onSnooze, showActions = true })
                 size="sm"
                 variant="outline"
                 className="h-8 hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => onSkip?.(dose.id)}
+                onClick={() => onSkip?.(dose._id)} // Using dose._id
               >
                 <X className="w-3 h-3" />
               </Button>
