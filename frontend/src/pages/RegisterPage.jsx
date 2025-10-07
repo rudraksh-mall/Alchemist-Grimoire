@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
 import { Sparkles, Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
+import useAuthStore from '../hooks/useAuthStore';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -20,8 +20,12 @@ export function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { register, googleAuth } = useAuth();
+  const { register, googleAuth, user } = useAuthStore();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user) navigate('/dashboard');
+  }, [user]);
 
   const handleChange = (e) => {
     setFormData(prev => ({

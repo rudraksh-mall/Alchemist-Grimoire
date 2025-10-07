@@ -1,49 +1,57 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { useNavigate, Link } from 'react-router-dom';
-import { Sparkles, Mail, Lock, Eye, EyeOff } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Separator } from '../components/ui/separator';
-import { toast } from 'sonner';
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import { useNavigate, Link } from "react-router-dom";
+import { Sparkles, Mail, Lock, Eye, EyeOff } from "lucide-react";
+import useAuthStore from "../hooks/useAuthStore";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/card";
+import { Separator } from "../components/ui/separator";
+import { toast } from "sonner";
 
 export function LoginPage() {
-  const [email, setEmail] = useState('demo@alchemist.com');
-  const [password, setPassword] = useState('demo123');
+  const [email, setEmail] = useState("demo@alchemist.com");
+  const [password, setPassword] = useState("demo123");
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const { login, googleAuth } = useAuth();
+  // Add this hook inside the LoginPage function:
+
+  // Access the user object from the store
+  const { user, login, googleAuth, isLoading } = useAuthStore();
   const navigate = useNavigate();
+
+  // 🎯 FIX: Navigation Watcher Hook 🎯
+  useEffect(() => {
+    // If the user object is now defined (login was successful), navigate away.
+    if (user) {
+      navigate("/dashboard");
+    }
+  }, [user, navigate]); // Reruns whenever the user state changes
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email || !password) return;
 
-    setIsLoading(true);
     try {
-      await login(email, password);
-      toast.success('Welcome back, mystical alchemist!');
-      navigate('/dashboard');
+      const loggedInUser = await login(email, password);
+      if (loggedInUser) {
+        toast.success("Welcome back, mystical alchemist!"); // ❌ DELETE THIS LINE: navigate('/dashboard');
+      }
     } catch (error) {
-      toast.error('Invalid credentials. Please try again.');
-    } finally {
-      setIsLoading(false);
+      toast.error("Invalid credentials. Please try again.");
     }
   };
 
   const handleGoogleAuth = async () => {
-    setIsLoading(true);
     try {
       await googleAuth();
-      toast.success('Welcome via the magical portal!');
-      navigate('/dashboard');
     } catch (error) {
-      toast.error('Google authentication failed.');
-    } finally {
-      setIsLoading(false);
+      toast.error("Google authentication failed.");
     }
   };
 
@@ -60,7 +68,7 @@ export function LoginPage() {
           transition={{
             duration: 8,
             repeat: Infinity,
-            ease: "easeInOut"
+            ease: "easeInOut",
           }}
         />
         <motion.div
@@ -72,7 +80,7 @@ export function LoginPage() {
           transition={{
             duration: 6,
             repeat: Infinity,
-            ease: "easeInOut"
+            ease: "easeInOut",
           }}
         />
       </div>
@@ -93,7 +101,7 @@ export function LoginPage() {
             >
               <Sparkles className="w-8 h-8 text-white" />
             </motion.div>
-            
+
             <div>
               <CardTitle className="text-2xl font-cinzel text-card-foreground">
                 Alchemist's Grand Grimoire
@@ -163,12 +171,16 @@ export function LoginPage() {
                 {isLoading ? (
                   <motion.div
                     animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    transition={{
+                      duration: 1,
+                      repeat: Infinity,
+                      ease: "linear",
+                    }}
                   >
                     <Sparkles className="w-4 h-4" />
                   </motion.div>
                 ) : (
-                  'Enter the Grimoire'
+                  "Enter the Grimoire"
                 )}
               </Button>
             </form>
@@ -210,7 +222,7 @@ export function LoginPage() {
 
             <div className="text-center">
               <p className="text-sm text-muted-foreground">
-                New to the mystical arts?{' '}
+                New to the mystical arts?{" "}
                 <Link
                   to="/register"
                   className="text-primary hover:underline font-medium"

@@ -9,7 +9,7 @@ import {
   Sparkles 
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
+import useAuthStore from '../hooks/useAuthStore';
 import { Button } from './ui/button';
 
 const navigationItems = [
@@ -23,7 +23,7 @@ const navigationItems = [
 export function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout, user } = useAuth();
+  const { logout, user } = useAuthStore();
 
   const handleLogout = () => {
     logout();

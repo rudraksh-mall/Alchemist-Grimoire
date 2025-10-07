@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Settings,
@@ -13,7 +14,7 @@ import {
   Save,
   Trash2,
 } from "lucide-react";
-import { useAuth } from "../hooks/useAuth";
+import useAuthStore from "../hooks/useAuthStore";
 import { Sidebar } from "../components/Sidebar";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -38,10 +39,16 @@ import { useTheme } from "../components/ThemeProvider";
 import { toast } from "sonner";
 
 export function SettingsPage() {
-  const { user, logout } = useAuth();
+  const { user, logout } = useAuthStore();
   const { theme, setTheme } = useTheme();
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!user) navigate("/login");
+  }, [user]);
 
   const [settings, setSettings] = useState({
     name: user?.name || "",
@@ -60,7 +67,17 @@ export function SettingsPage() {
   const handleSettingChange = (key, value) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
   };
+  // Ensure this URL is correct:
+  const handleConnectGoogle = () => {
+    // Check if user exists before getting the ID
+    const userId = user?._id || user?.id;
 
+    if (!userId) {
+      toast.error("Please log in again to connect your calendar.");
+      return;
+    }
+    window.location.href = `http://localhost:8000/api/v1/users/google/login?userId=${userId}`;
+  };
   const handleSaveSettings = async () => {
     setIsLoading(true);
     try {
@@ -324,13 +341,20 @@ export function SettingsPage() {
                         Sync medicine schedules with Google Calendar
                       </p>
                     </div>
-                    <Switch
-                      id="google-calendar"
-                      checked={settings.googleCalendar}
-                      onCheckedChange={(value) =>
-                        handleSettingChange("googleCalendar", value)
-                      }
-                    />
+                    {settings.googleCalendar ? (
+                      <Button variant="success" disabled>
+                        <Calendar className="w-4 h-4 mr-2" /> Connected
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={handleConnectGoogle}
+                        // 🎯 CRITICAL FIX: Add type="button" to prevent form submission 🎯
+                        type="button"
+                        className="magical-glow"
+                      >
+                        Connect Calendar
+                      </Button>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between">

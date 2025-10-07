@@ -17,8 +17,16 @@ const medicationScheduleSchema = new Schema(
     },
     frequency: {
       type: String,
-      enum: ["daily", "weekly", "custom"],
-      default: "daily",
+      enum: [
+        "once daily",
+        "twice daily",
+        "three times daily",
+        "four times daily",
+        "as needed",
+        "weekly",
+        "custom",
+      ],
+      default: "once daily",
     },
     times: [
       {

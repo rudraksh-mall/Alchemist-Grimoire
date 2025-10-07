@@ -6,6 +6,10 @@ import {
 } from "react-router-dom";
 import { Toaster } from "./components/ui/sonner";
 import { AuthProvider } from "./components/AuthProvider";
+import { useEffect } from "react";
+import useAuthStore from "./hooks/useAuthStore";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Toaster } from "./components/ui/sonner";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
@@ -17,6 +21,23 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { ThemeProvider } from "./components/ThemeProvider";
 
 export default function App() {
+  const { initAuth, isLoading } = useAuthStore();
+
+  // Initialize auth state on app mount
+  useEffect(() => {
+    initAuth();
+  }, [initAuth]);
+
+  if (isLoading) {
+    // Global loading screen while auth initializes
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <p className="text-muted-foreground font-cinzel text-lg">
+          Awakening mystical energies...
+        </p>
+      </div>
+    );
+  }
   return (
     <AuthProvider>
       <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">

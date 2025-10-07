@@ -23,16 +23,16 @@ const doseLogSchema = new Schema(
 
     status: {
       type: String,
-      enum: ["taken", "missed", "snoozed"],
+      enum: ["taken", "missed", "snoozed", "pending", "skipped"],
       required: true,
     },
 
     actionedAt: {
-      type: Date,
-      default: Date.now,
+      type: Date, // Remove default value. The field is null until marked 'taken'.
       validate: {
         validator: function (v) {
-          return !v || v >= this.scheduledFor;
+          // Only validate if status is 'taken' AND value 'v' exists
+          return this.status !== "taken" || (v && v >= this.scheduledFor);
         },
         message: "actionedAt cannot be before scheduledFor",
       },

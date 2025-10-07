@@ -5,7 +5,6 @@ import { chatApi } from '../services/api';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { ScrollArea } from './ui/scroll-area';
 
 export function ChatBot() {
   const [messages, setMessages] = useState([
@@ -18,11 +17,12 @@ export function ChatBot() {
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const scrollAreaRef = useRef(null);
+  const scrollContainerRef = useRef(null); // Used for scrolling logic
 
   const scrollToBottom = () => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+    // Scrolls the chat window to the latest message
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
   };
 
@@ -46,12 +46,33 @@ export function ChatBot() {
     setIsLoading(true);
 
     try {
-      const response = await chatApi.sendMessage(inputMessage);
-      setMessages(prev => [...prev, response]);
+      // 1. Get the raw text response string from the backend
+      const aiResponseText = await chatApi.sendMessage(inputMessage); 
+      
+      // 2. Construct the message object in the format expected by the 'messages' state
+      const aiMessage = {
+        id: (Date.now() + 1).toString(),
+        message: aiResponseText, // The AI's schedule text
+        isUser: false,
+        timestamp: new Date().toISOString(),
+      };
+      
+      // 3. Add the correctly formatted object to the state
+      setMessages(prev => [...prev, aiMessage]);
+      
     } catch (error) {
+      // Logic to extract backend error message for better debugging
+      let messageText = '🌙 The mystical energies are disturbed... Please try again later.';
+      
+      // Attempt to extract the specific error message from the backend response
+      const backendErrorData = error.response?.data;
+      if (backendErrorData?.message) {
+        messageText = backendErrorData.message;
+      }
+      
       const errorMessage = {
         id: (Date.now() + 1).toString(),
-        message: '🌙 The mystical energies are disturbed... Please try again later.',
+        message: messageText,
         isUser: false,
         timestamp: new Date().toISOString()
       };
@@ -76,23 +97,21 @@ export function ChatBot() {
       transition={{ duration: 0.4 }}
       className="h-full flex flex-col"
     >
-      <Card className="h-full flex flex-col magical-glow">
-        <CardHeader className="flex-shrink-0 border-b border-border/50">
+      <Card className="h-full flex flex-col bg-card/80 backdrop-blur-sm magical-glow">
+        <CardHeader className="flex-shrink-0 border-b-0">
           <CardTitle className="flex items-center space-x-2 font-cinzel">
             <div className="w-8 h-8 crystal-gradient rounded-full flex items-center justify-center">
               <MessageCircle className="w-4 h-4 text-white" />
             </div>
             <span>Mystic Fortune Teller</span>
           </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Ask me anything about your wellness journey
-          </p>
         </CardHeader>
 
-        <CardContent className="flex-1 flex flex-col p-4 space-y-4">
-          <ScrollArea 
-            className="flex-1 pr-4" 
-            ref={scrollAreaRef}
+        <CardContent className="flex-1 flex flex-col p-4 space-y-4 overflow-hidden">
+          {/* This div replaces the ScrollArea component but maintains the scrolling needed */}
+          <div 
+            className="flex-1 overflow-y-auto pr-4" 
+            ref={scrollContainerRef} // Now using scrollContainerRef
           >
             <div className="space-y-4">
               <AnimatePresence>
@@ -115,7 +134,7 @@ export function ChatBot() {
                       `}
                     >
                       <p className="text-sm whitespace-pre-wrap">{message.message}</p>
-                      <p className={`text-xs mt-1 opacity-70`}>
+                      <p className={`text-xs mt-1 opacity-70 ${message.isUser ? 'text-right' : 'text-left'}`}>
                         {formatTime(message.timestamp)}
                       </p>
                     </div>
@@ -143,9 +162,9 @@ export function ChatBot() {
                 </motion.div>
               )}
             </div>
-          </ScrollArea>
+          </div>
 
-          <form onSubmit={handleSendMessage} className="flex space-x-2">
+          <form onSubmit={handleSendMessage} className="flex space-x-2 pt-2">
             <Input
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
@@ -156,7 +175,7 @@ export function ChatBot() {
             <Button 
               type="submit" 
               disabled={!inputMessage.trim() || isLoading}
-              className="magical-glow"
+              className='magical-glow'
             >
               <Send className="w-4 h-4" />
             </Button>

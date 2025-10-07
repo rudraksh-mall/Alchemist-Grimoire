@@ -1,10 +1,10 @@
 import { Navigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
+import useAuthStore from '../hooks/useAuthStore';
 import { motion } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
 
 export function ProtectedRoute({ children }) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading } = useAuthStore();
 
   if (isLoading) {
     return (
