@@ -5,6 +5,7 @@ import { checkAndSendReminders } from "../services/notification.service.js";
 export const startCronJobs = () => {
     cron.schedule("* * * * *", async () => {
         console.log("⏳ Checking for upcoming reminders...");
+        // Ensure the function is called asynchronously
         await checkAndSendReminders();
     });
 };

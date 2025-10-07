@@ -45,7 +45,7 @@ const userSchema = new Schema(
       },
       email: {
         type: Boolean,
-        default: false,
+        default: true,
       },
     },
 
