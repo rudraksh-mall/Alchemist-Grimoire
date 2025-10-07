@@ -4,31 +4,35 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/user.model.js";
 import jwt from "jsonwebtoken";
 
+// REVISED: generateAccessAndRefreshTokens (backend/src/controllers/auth.controller.js)
+
 const generateAccessAndRefreshTokens = async (userId) => {
   try {
-    console.log("generateAccessAndRefreshTokens called with userId:", userId);
+    // 1. Fetch the user
     const user = await User.findById(userId);
-    console.log("User fetched:", user);
+    console.log("User fetched (for token gen):", user ? "Found" : "Not Found"); // Debug log
 
     if (!user) {
-      throw new ApiError(
-        500,
-        "User not found for token generation, please re-login."
-      );
+      // 🎯 FIX: Do NOT throw a 500 error here.
+      // If the user is not found, return null and let the calling function (refreshAccessToken)
+      // handle the 401 Unauthorized security issue gracefully.
+      return { accessToken: null, refreshToken: null };
     }
 
+    // 2. Generate new tokens
     const accessToken = user.generateAccessToken();
     const refreshToken = user.generateRefreshToken();
 
+    // 3. Save the new refresh token to the database
     user.refreshToken = refreshToken;
     await user.save({ validateBeforeSave: false });
 
     return { accessToken, refreshToken };
   } catch (error) {
-    console.error("Error in generateAccessAndRefreshTokens:", error);
+    console.error("Error in generateAccessAndRefreshTokens:", error); // Throwing a generic 500 here is acceptable if the database save fails.
     throw new ApiError(
       500,
-      "Something went wrong while generating refresh and access token"
+      "Something went wrong during token generation (DB update failed)."
     );
   }
 };

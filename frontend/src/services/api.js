@@ -216,38 +216,8 @@ export const statsApi = {
 export const chatApi = {
   // POST /api/chat/ask
   sendMessage: async (message) => {
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
-    // Simple mock responses based on keywords
-    let response =
-      "I sense great wisdom in your question, seeker. Let me consult the mystical scrolls...";
-
-    if (
-      message.toLowerCase().includes("today") ||
-      message.toLowerCase().includes("pills")
-    ) {
-      response =
-        "🔮 Today's potions include: Elixir of Energy at 8:00 AM and 8:00 PM, and Crystal Clarity Pills at 9:00 AM. The spirits whisper that you've already taken your morning elixir!";
-    } else if (
-      message.toLowerCase().includes("missed") ||
-      message.toLowerCase().includes("yesterday")
-    ) {
-      response =
-        "⚡ The crystal ball reveals you missed Crystal Clarity Pills yesterday at 9:00 AM. But fear not! Your overall adherence remains strong at 85%.";
-    } else if (
-      message.toLowerCase().includes("schedule") ||
-      message.toLowerCase().includes("when")
-    ) {
-      response =
-        "📜 Your mystical schedule shows 3 active potions. Next dose: Elixir of Energy tonight at 8:00 PM. The stars align favorably for your wellness journey!";
-    }
-
-    return {
-      id: Date.now().toString(),
-      message: response,
-      isUser: false,
-      timestamp: new Date().toISOString(),
-    };
+    const response = await api.post("/v1/chat/ask", { message });
+    return response.data.data.response; // Return just the AI's text response
   },
 };
 
