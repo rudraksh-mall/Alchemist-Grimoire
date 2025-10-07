@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Pill, Clock, Calendar, Palette, Save } from "lucide-react";
 import useMedicineStore from "../hooks/useMedicineStore";
+import useDoseStore from "../hooks/useDoseStore";
 import { Sidebar } from "../components/Sidebar";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -49,6 +50,7 @@ export function ScheduleFormPage() {
   const { id } = useParams();
   const { medicines, createMedicine, updateMedicine, fetchMedicines } =
     useMedicineStore();
+  const { fetchDoses } = useDoseStore();
   const [isLoading, setIsLoading] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
 
