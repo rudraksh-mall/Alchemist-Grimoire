@@ -1,5 +1,3 @@
-// src/components/ChatBot.jsx
-
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Sparkles, MessageCircle } from 'lucide-react';
@@ -19,9 +17,10 @@ export function ChatBot() {
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const scrollContainerRef = useRef(null);
+  const scrollContainerRef = useRef(null); // Used for scrolling logic
 
   const scrollToBottom = () => {
+    // Scrolls the chat window to the latest message
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
@@ -47,13 +46,33 @@ export function ChatBot() {
     setIsLoading(true);
 
     try {
-      // Assuming chatApi.sendMessage returns a message object in the correct format
-      const response = await chatApi.sendMessage(inputMessage);
-      setMessages(prev => [...prev, response]);
+      // 1. Get the raw text response string from the backend
+      const aiResponseText = await chatApi.sendMessage(inputMessage); 
+      
+      // 2. Construct the message object in the format expected by the 'messages' state
+      const aiMessage = {
+        id: (Date.now() + 1).toString(),
+        message: aiResponseText, // The AI's schedule text
+        isUser: false,
+        timestamp: new Date().toISOString(),
+      };
+      
+      // 3. Add the correctly formatted object to the state
+      setMessages(prev => [...prev, aiMessage]);
+      
     } catch (error) {
+      // Logic to extract backend error message for better debugging
+      let messageText = '🌙 The mystical energies are disturbed... Please try again later.';
+      
+      // Attempt to extract the specific error message from the backend response
+      const backendErrorData = error.response?.data;
+      if (backendErrorData?.message) {
+        messageText = backendErrorData.message;
+      }
+      
       const errorMessage = {
         id: (Date.now() + 1).toString(),
-        message: '🌙 The mystical energies are disturbed... Please try again later.',
+        message: messageText,
         isUser: false,
         timestamp: new Date().toISOString()
       };
@@ -89,9 +108,10 @@ export function ChatBot() {
         </CardHeader>
 
         <CardContent className="flex-1 flex flex-col p-4 space-y-4 overflow-hidden">
+          {/* This div replaces the ScrollArea component but maintains the scrolling needed */}
           <div 
             className="flex-1 overflow-y-auto pr-4" 
-            ref={scrollContainerRef}
+            ref={scrollContainerRef} // Now using scrollContainerRef
           >
             <div className="space-y-4">
               <AnimatePresence>
@@ -155,6 +175,7 @@ export function ChatBot() {
             <Button 
               type="submit" 
               disabled={!inputMessage.trim() || isLoading}
+              className='magical-glow'
             >
               <Send className="w-4 h-4" />
             </Button>

@@ -1,4 +1,6 @@
+import { User } from "../models/user.model.js";
 import { createInitialDoses } from "../services/doseCreation.service.js";
+import { createCalendarEvent } from "../services/calendar.service.js";
 import { MedicationSchedule } from "../models/medicationSchedule.model.js";
 import { DoseLog } from "../models/doseLog.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -10,6 +12,7 @@ const createMedicationSchedule = asyncHandler(async (req, res) => {
   const { name, dosage, frequency, times, startDate, endDate, notes } =
     req.body;
 
+  // --- 1. Validation ---
   if (
     !name ||
     !dosage ||
@@ -24,6 +27,7 @@ const createMedicationSchedule = asyncHandler(async (req, res) => {
     );
   }
 
+  // --- 2. Create Schedule in MongoDB ---
   const schedule = await MedicationSchedule.create({
     name,
     dosage,
@@ -35,10 +39,42 @@ const createMedicationSchedule = asyncHandler(async (req, res) => {
     userId: req.user._id,
   });
 
-  // 🎯 CRITICAL FIX: CALL THE DOSE CREATION SERVICE 🎯
-  // This creates the initial DoseLog entries that the frontend fetches.
+  // --- 3. Create Initial Dose Logs ---
   await createInitialDoses(schedule);
 
+  // --- 4. GOOGLE CALENDAR SYNC (Showstopper Feature) ---
+
+  // Fetch the user's Google Refresh Token and Timezone (needed for event creation)
+  const user = await User.findById(req.user._id).select(
+    "googleRefreshToken timezone"
+  );
+
+  if (user && user.googleRefreshToken) {
+    try {
+      // Call the service to create the event using the token
+      const eventId = await createCalendarEvent(
+        schedule,
+        user.googleRefreshToken
+      );
+
+      // Optional: Save the Google Event ID back to the schedule in MongoDB
+      await MedicationSchedule.findByIdAndUpdate(schedule._id, {
+        googleEventId: eventId,
+      });
+
+      console.log(
+        `[Google Sync] Event created for ${schedule.name} with ID: ${eventId}`
+      );
+    } catch (syncError) {
+      // Log the error but DO NOT crash the server (non-critical feature failure)
+      console.error(
+        "[Google Sync ERROR] Failed to create calendar event:",
+        syncError.message
+      );
+    }
+  }
+
+  // --- 5. Final Response ---
   return res
     .status(201)
     .json(

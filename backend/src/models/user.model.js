@@ -2,14 +2,6 @@ import mongoose, { Schema } from "mongoose";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
-const tokenSchema = new Schema({
-  access_token: String,
-  refresh_token: String,
-  scope: String,
-  token_type: String,
-  expiry_date: Number,
-});
-
 const userSchema = new Schema(
   {
     fullName: {
@@ -45,12 +37,20 @@ const userSchema = new Schema(
       },
       email: {
         type: Boolean,
-        default: false,
+        default: true,
       },
     },
 
-    googleTokens: tokenSchema,
+    googleRefreshToken: {
+      type: String,
+      default: null, // Stores the permanent token needed for calendar access
+    },
 
+    googleCalendarId: {
+      type: String,
+      default: "primary", // Stores the ID of the calendar to sync to
+    },
+    
     refreshToken: {
       type: String,
     },
