@@ -5,11 +5,8 @@ import {
   Navigate,
 } from "react-router-dom";
 import { Toaster } from "./components/ui/sonner";
-import { AuthProvider } from "./components/AuthProvider";
 import { useEffect } from "react";
 import useAuthStore from "./hooks/useAuthStore";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { Toaster } from "./components/ui/sonner";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
@@ -39,7 +36,6 @@ export default function App() {
     );
   }
   return (
-    <AuthProvider>
       <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
         <Router>
           <div className="min-h-screen bg-background text-foreground scroll-smooth">
@@ -115,6 +111,5 @@ export default function App() {
           </div>
         </Router>
       </ThemeProvider>
-    </AuthProvider>
   );
 }
