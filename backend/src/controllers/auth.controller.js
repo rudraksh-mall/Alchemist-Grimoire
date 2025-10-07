@@ -4,27 +4,35 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/user.model.js";
 import jwt from "jsonwebtoken";
 
+// REVISED: generateAccessAndRefreshTokens (backend/src/controllers/auth.controller.js)
+
 const generateAccessAndRefreshTokens = async (userId) => {
   try {
-    console.log("generateAccessAndRefreshTokens called with userId:", userId);
+    // 1. Fetch the user
     const user = await User.findById(userId);
-    console.log("User fetched:", user);
+    console.log("User fetched (for token gen):", user ? "Found" : "Not Found"); // Debug log
 
-    if (!user)
-      throw new ApiError(404, "User not found while generating tokens");
+    if (!user) {
+      // 🎯 FIX: Do NOT throw a 500 error here.
+      // If the user is not found, return null and let the calling function (refreshAccessToken)
+      // handle the 401 Unauthorized security issue gracefully.
+      return { accessToken: null, refreshToken: null };
+    }
 
+    // 2. Generate new tokens
     const accessToken = user.generateAccessToken();
     const refreshToken = user.generateRefreshToken();
 
+    // 3. Save the new refresh token to the database
     user.refreshToken = refreshToken;
     await user.save({ validateBeforeSave: false });
 
     return { accessToken, refreshToken };
   } catch (error) {
-    console.error("Error in generateAccessAndRefreshTokens:", error);
+    console.error("Error in generateAccessAndRefreshTokens:", error); // Throwing a generic 500 here is acceptable if the database save fails.
     throw new ApiError(
       500,
-      "Something went wrong while generating refresh and access token"
+      "Something went wrong during token generation (DB update failed)."
     );
   }
 };
@@ -52,9 +60,16 @@ const registerUser = asyncHandler(async (req, res) => {
     "-password -refreshToken"
   );
 
-  return res
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
+    user._id
+  );
+  res
+    .cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+    })
     .status(201)
-    .json(new ApiResponse(201, createdUser, "User registered successfully"));
+    .json({ user: createdUser, accessToken });
 });
 
 // Login User
@@ -83,13 +98,12 @@ const loginUser = asyncHandler(async (req, res) => {
   );
 
   return res
-    .status(200)
-    .cookie("accessToken", accessToken, options)
     .cookie("refreshToken", refreshToken, options)
+    .status(200)
     .json(
       new ApiResponse(
         200,
-        { user: userSafe, accessToken, refreshToken },
+        { user: userSafe, token: accessToken },
         "Login successful"
       )
     );
@@ -103,10 +117,9 @@ const logoutUser = asyncHandler(async (req, res) => {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
   };
-  return res
-    .status(200)
-    .clearCookie("accessToken", options)
+  res
     .clearCookie("refreshToken", options)
+    .status(200)
     .json(new ApiResponse(200, {}, "Logged out successfully"));
 });
 
@@ -138,9 +151,12 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     throw new ApiError(401, "Invalid refresh token");
   }
   const user = await User.findById(decodedToken._id);
-  if (!user || incomingRefreshToken !== user.refreshToken)
-    throw new ApiError(401, "Refresh token invalid or expired");
 
+  // 🎯 FIX: Combined check to prevent access to user.refreshToken if user is null 🎯
+  if (!user || incomingRefreshToken !== user.refreshToken) {
+    // If user is null (not found) OR tokens don't match (revoked)
+    throw new ApiError(401, "Refresh token invalid or expired");
+  }
   const { accessToken, refreshToken: newRefreshToken } =
     await generateAccessAndRefreshTokens(user._id);
 
@@ -150,15 +166,10 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
   };
 
   return res
-    .status(200)
-    .cookie("accessToken", accessToken, options)
     .cookie("refreshToken", newRefreshToken, options)
+    .status(200)
     .json(
-      new ApiResponse(
-        200,
-        { accessToken, refreshToken: newRefreshToken },
-        "Access token refreshed"
-      )
+      new ApiResponse(200, { token: accessToken }, "Access token refreshed")
     );
 });
 

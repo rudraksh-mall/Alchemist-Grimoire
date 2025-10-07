@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { Bell, Calendar, Clock, Filter } from 'lucide-react';
-import { useDoses } from '../hooks/useDoses';
+import useDoseStore from '../hooks/useDoseStore';
 import { Sidebar } from '../components/Sidebar';
 import { DoseCard } from '../components/DoseCard';
 import { Button } from '../components/ui/button';
@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { useState } from 'react';
 
 export function RemindersPage() {
-  const { doses, upcomingDoses, markAsTaken, markAsSkipped, isLoading } = useDoses();
+  const { doses, upcomingDoses, markAsTaken, markAsSkipped, isLoading, fetchDoses } = useDoseStore();
   const [filter, setFilter] = useState('all');
 
   const handleTakeDose = async (id) => {

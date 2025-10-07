@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
 import { Sparkles, Mail, Lock, Eye, EyeOff } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
+import useAuthStore from '../hooks/useAuthStore';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -14,36 +14,32 @@ export function LoginPage() {
   const [email, setEmail] = useState('demo@alchemist.com');
   const [password, setPassword] = useState('demo123');
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const { login, googleAuth } = useAuth();
   const navigate = useNavigate();
+
+  const { login, googleAuth, isLoading } = useAuthStore(); // ✅ Zustand state
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email || !password) return;
 
-    setIsLoading(true);
     try {
-      await login(email, password);
-      toast.success('Welcome back, mystical alchemist!');
-      navigate('/dashboard');
+      const loggedInUser = await login(email, password);
+      if (loggedInUser) {
+        toast.success('Welcome back, mystical alchemist!');
+        navigate('/dashboard');
+      }
     } catch (error) {
       toast.error('Invalid credentials. Please try again.');
-    } finally {
-      setIsLoading(false);
     }
   };
 
   const handleGoogleAuth = async () => {
-    setIsLoading(true);
     try {
       await googleAuth();
       toast.success('Welcome via the magical portal!');
       navigate('/dashboard');
     } catch (error) {
       toast.error('Google authentication failed.');
-    } finally {
-      setIsLoading(false);
     }
   };
 

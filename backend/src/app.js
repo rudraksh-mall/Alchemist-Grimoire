@@ -19,10 +19,11 @@ app.use(cookieParser());
 import userRouter from "./routes/user.routes.js";
 import medicationRouter from "./routes/medication.routes.js";
 import doseLogRouter from "./routes/doseLog.routes.js";
+import chatRouter from "./routes/chat.routes.js";
 
 // routes declaration
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/medications", medicationRouter);
 app.use("/api/v1/dose-logs", doseLogRouter);
-
+app.use("/api/v1/chat", chatRouter);
 export { app };
