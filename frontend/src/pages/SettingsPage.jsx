@@ -35,10 +35,12 @@ import {
 } from "../components/ui/select";
 import { Separator } from "../components/ui/separator";
 import { Alert, AlertDescription } from "../components/ui/alert";
+import { useTheme } from "../components/ThemeProvider";
 import { toast } from "sonner";
 
 export function SettingsPage() {
   const { user, logout } = useAuthStore();
+  const { theme, setTheme } = useTheme();
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -401,69 +403,13 @@ export function SettingsPage() {
                       <Sun className="w-4 h-4" />
                       <Switch
                         id="dark-mode"
-                        checked={isDarkMode}
-                        onCheckedChange={setIsDarkMode}
+                        checked={theme === "dark"}
+                        onCheckedChange={(checked) =>
+                          setTheme(checked ? "dark" : "light")
+                        }
                       />
                       <Moon className="w-4 h-4" />
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            {/* Privacy Settings */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.5 }}
-            >
-              <Card className="magical-glow">
-                <CardHeader>
-                  <CardTitle className="font-cinzel flex items-center space-x-2">
-                    <Shield className="w-5 h-5" />
-                    <span>Privacy & Security</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Alert>
-                    <Shield className="w-4 h-4" />
-                    <AlertDescription>
-                      Figma Make is not intended for collecting PII or securing
-                      sensitive data. Please be mindful of the information you
-                      share.
-                    </AlertDescription>
-                  </Alert>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label htmlFor="data-sharing">Data Sharing</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Share anonymized usage data to improve the app
-                      </p>
-                    </div>
-                    <Switch
-                      id="data-sharing"
-                      checked={settings.dataSharing}
-                      onCheckedChange={(value) =>
-                        handleSettingChange("dataSharing", value)
-                      }
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label htmlFor="analytics">Analytics</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Help us understand how you use the app
-                      </p>
-                    </div>
-                    <Switch
-                      id="analytics"
-                      checked={settings.analytics}
-                      onCheckedChange={(value) =>
-                        handleSettingChange("analytics", value)
-                      }
-                    />
                   </div>
                 </CardContent>
               </Card>
