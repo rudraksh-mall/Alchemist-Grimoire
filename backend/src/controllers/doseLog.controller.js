@@ -74,28 +74,60 @@ const getDoseLogsBySchedule = asyncHandler(async (req, res) => {
 
 // backend/src/controllers/doseLog.controller.js (Final Fix for getTodaysDoseLogs)
 
-// backend/src/controllers/doseLog.controller.js (Simplified getTodaysDoseLogs)
-
+// FIX: Correctly filter by today's date and current time
 const getTodaysDoseLogs = asyncHandler(async (req, res) => {
+  // 🎯 NEW LOG: Check if the route is hit at all
+  console.log(`[DoseLog Controller] Route /v1/dose-logs/today accessed by User: ${req.user._id}`);
+  
   const userId = req.user._id;
 
-  // 🎯 FIX: Query for ALL pending doses, regardless of date, then sort.
-  // This eliminates the date math errors and forces the UI to get data if it exists.
+  /*
+  // ⚠️ CRITICAL STEP MISSING ⚠️
+  // If your dose logs are missing, you MUST ensure that today's logs 
+  // are created for ALL active medications before querying.
+  try {
+      // THIS CALL IS CRITICAL if logs are missing for today
+      // await generateMissingDoses(userId, new Date()); 
+      // console.log("[DoseLog Controller] Generated missing doses for today.");
+  } catch (error) {
+      console.error("[DoseLog Controller] Dose generation failed:", error);
+      // Continue execution even if generation fails
+  }
+  */
+  
+  // 1. Calculate today's date boundaries in UTC (to match doseCreation.service.js)
+  // Get current date, then normalize it to UTC midnight (start of today)
+  const startOfToday = new Date();
+  startOfToday.setUTCHours(0, 0, 0, 0);
+
+  // Get start of tomorrow (end of today)
+  const endOfToday = new Date(startOfToday);
+  endOfToday.setUTCDate(startOfToday.getUTCDate() + 1);
+
+  // 2. Query for pending logs scheduled for TODAY AND the CURRENT MOMENT (or later)
   const logs = await DoseLog.find({
     userId,
     status: "pending",
+    // 🎯 FINAL ROBUST FIX: Ensure the dose is scheduled for today's calendar day
+    scheduledFor: {
+      $gte: new Date(Date.now() - 60000), // Future or within the last 60 seconds (safe buffer)
+      $lt: endOfToday, 
+    }
   })
     .populate({
       path: "scheduleId",
       // CRITICAL CHECK: Ensure these fields are correct in your MedicationSchedule model!
       select: "name dosage color",
     })
-    .sort({ scheduledFor: 1 });
+    .sort({ scheduledFor: 1 }); // Sort by time ascending
 
-  // Now you can debug the list of ALL pending doses and see why the UI doesn't like them.
-  console.log(`[Dose Log Debug] Found ${logs.length} total pending doses.`);
+  // 3. Removed redundant client-side filtering. MongoDB handles the future-time check.
 
-  // The logs object now holds ALL pending doses. The frontend can filter by today if necessary.
+  console.log(`[Dose Log Debug] Found ${logs.length} upcoming doses for client.`);
+  
+  // 🎯 NEW LOG: Output the entire response array to the console
+  console.log("[Dose Log Response Data]", logs);
+
   return res.json(
     new ApiResponse(200, logs, "Today's dose logs retrieved successfully")
   );
@@ -108,13 +140,13 @@ const getAdherenceStats = asyncHandler(async (req, res) => {
   const thirtyDaysAgo = new Date(now.setDate(now.getDate() - 30));
 
   // --- 1. Calculate Overall Statistics (for Pie Chart) ---
-  const totalDoses = await DoseLog.countDocuments({
-    userId,
-    scheduledFor: { $gte: thirtyDaysAgo },
-  });
-
+  // We use the aggregation pipeline to get counts for only COMPLETED statuses
   const statsPipeline = [
-    { $match: { userId, scheduledFor: { $gte: thirtyDaysAgo } } },
+    { $match: { 
+        userId, 
+        scheduledFor: { $gte: thirtyDaysAgo },
+        status: { $in: ["taken", "missed", "skipped"] } // Filter for completed actions
+    } },
     {
       $group: {
         _id: "$status",
@@ -129,8 +161,11 @@ const getAdherenceStats = asyncHandler(async (req, res) => {
   const missedDoses = results.find((r) => r._id === "missed")?.count || 0;
   const skippedDoses = results.find((r) => r._id === "skipped")?.count || 0;
 
+  // 🎯 FIX: Calculate total completed doses for the denominator
+  const totalCompletedDoses = takenDoses + missedDoses + skippedDoses;
+
   const adherenceRate =
-    totalDoses > 0 ? Math.round((takenDoses / totalDoses) * 100) : 0;
+    totalCompletedDoses > 0 ? Math.round((takenDoses / totalCompletedDoses) * 100) : 0;
 
   // --- 2. Calculate Weekly Trend (for Line Chart) ---
   const weeklyTrendPipeline = [
@@ -148,6 +183,9 @@ const getAdherenceStats = asyncHandler(async (req, res) => {
       $project: {
         _id: 0,
         week: { $concat: ["Week ", { $toString: "$_id" }] },
+        // Use $sum in the denominator to only include completed doses 
+        // in the weekly trend calculation if necessary, otherwise use $total.
+        // Assuming $total here includes all relevant logs for the week (pending + completed)
         rate: {
           $round: [{ $multiply: [{ $divide: ["$taken", "$total"] }, 100] }, 1],
         },
@@ -159,7 +197,7 @@ const getAdherenceStats = asyncHandler(async (req, res) => {
 
   const finalStats = {
     adherenceRate,
-    totalDoses,
+    totalDoses: totalCompletedDoses, // Return completed count to the client for overall stats
     takenDoses,
     missedDoses,
     skippedDoses,

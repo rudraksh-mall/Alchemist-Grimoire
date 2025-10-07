@@ -1,27 +1,29 @@
-// backend/src/services/doseCreation.service.js (FINAL CORRECTED VERSION)
-
 import { DoseLog } from "../models/doseLog.model.js";
 
 export const createInitialDoses = async (schedule) => {
   const dosesToCreate = [];
 
-  // Use the schedule's START DATE (or today, if the schedule started earlier)
+  // 1. Normalize dates to UTC midnight for stable calendar day comparison
   const startDate = new Date(schedule.startDate);
   const today = new Date();
+  
+  // Set both dates to UTC midnight to establish a consistent calendar start point
+  // This ensures the calendar day (YYYY-MM-DD) is calculated consistently.
+  startDate.setUTCHours(0, 0, 0, 0); 
+  today.setUTCHours(0, 0, 0, 0); 
 
   // Determine the actual start day (today or the schedule start date, whichever is later)
   const startDayTimestamp = Math.max(startDate.getTime(), today.getTime());
   const startDay = new Date(startDayTimestamp);
-  startDay.setHours(0, 0, 0, 0); // Normalize start date to midnight
 
   const horizonDays = 7;
   const validTimes = schedule.times.filter((t) => t && t.includes(":"));
 
   for (let i = 0; i < horizonDays; i++) {
-    // Create a new, stable date object for the iteration day (i.e., today + i days)
+    // Create a new date object for the iteration day (startDay + i days)
     const iterationDate = new Date(startDay);
-    iterationDate.setDate(startDay.getDate() + i);
-    iterationDate.setHours(0, 0, 0, 0); // Ensure clean start of the day
+    // Use UTC date methods to ensure the day change is correct regardless of local time zone
+    iterationDate.setUTCDate(startDay.getUTCDate() + i);
 
     validTimes.forEach((timeString) => {
       const parts = timeString.split(":");
@@ -34,17 +36,18 @@ export const createInitialDoses = async (schedule) => {
 
       const [hours, minutes] = parts.map(Number);
 
-      // Create the FINAL scheduled time using the iteration date as the base
+      // Create the FINAL scheduled time using the UTC-normalized iteration date as the base
       const scheduledTime = new Date(iterationDate);
-      scheduledTime.setHours(hours, minutes, 0, 0);
+      // Set the time using UTC methods to define the precise moment in UTC
+      scheduledTime.setUTCHours(hours, minutes, 0, 0);
 
-      // Double check: Ensure we don't schedule a dose before the official start date
+      // Final check: Ensure we don't schedule a dose before the medicine's start date
       if (scheduledTime.getTime() >= new Date(schedule.startDate).getTime()) {
         dosesToCreate.push({
           userId: schedule.userId,
           scheduleId: schedule._id,
-          // 🎯 FIX: scheduledFor is guaranteed to be a valid Date object here
-          scheduledFor: scheduledTime,
+          // scheduledFor is now a UTC timestamp
+          scheduledFor: scheduledTime, 
           status: "pending",
         });
       }
@@ -58,8 +61,13 @@ export const createInitialDoses = async (schedule) => {
         `[Circus Crier] Created ${dosesToCreate.length} initial doses for schedule: ${schedule.name}`
       );
     } catch (error) {
-      console.error("[Circus Crier CRASHED] Dose Insertion Failed:", error);
-      throw error;
+      // Handle potential duplicate key error (11000) if cron job runs twice
+      if (error.code !== 11000) { 
+         console.error("[Circus Crier CRASHED] Dose Insertion Failed:", error);
+         throw error;
+      } else {
+         console.warn("[Circus Crier] Duplicate dose insert attempted and ignored.");
+      }
     }
   }
 };
