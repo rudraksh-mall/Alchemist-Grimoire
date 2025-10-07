@@ -1,30 +1,41 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { 
-  Settings, 
-  Bell, 
-  Clock, 
-  Mail, 
-  Calendar, 
-  User, 
-  Shield, 
-  Moon, 
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+import {
+  Settings,
+  Bell,
+  Clock,
+  Mail,
+  Calendar,
+  User,
+  Shield,
+  Moon,
   Sun,
   Save,
-  Trash2
-} from 'lucide-react';
-import useAuthStore from '../hooks/useAuthStore';
-import { Sidebar } from '../components/Sidebar';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Switch } from '../components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Separator } from '../components/ui/separator';
-import { Alert, AlertDescription } from '../components/ui/alert';
-import { toast } from 'sonner';
+  Trash2,
+} from "lucide-react";
+import useAuthStore from "../hooks/useAuthStore";
+import { Sidebar } from "../components/Sidebar";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/card";
+import { Switch } from "../components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
+import { Separator } from "../components/ui/separator";
+import { Alert, AlertDescription } from "../components/ui/alert";
+import { toast } from "sonner";
 
 export function SettingsPage() {
   const { user, logout } = useAuthStore();
@@ -34,75 +45,89 @@ export function SettingsPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!user) navigate('/login');
+    if (!user) navigate("/login");
   }, [user]);
-  
+
   const [settings, setSettings] = useState({
-    name: user?.name || '',
-    email: user?.email || '',
-    timezone: 'America/New_York',
+    name: user?.name || "",
+    email: user?.email || "",
+    timezone: "America/New_York",
     browserNotifications: true,
     emailNotifications: false,
     smsNotifications: false,
-    reminderBefore: '15',
+    reminderBefore: "15",
     googleCalendar: false,
     appleHealth: false,
     dataSharing: false,
-    analytics: true
+    analytics: true,
   });
 
   const handleSettingChange = (key, value) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
+    setSettings((prev) => ({ ...prev, [key]: value }));
   };
+  // Ensure this URL is correct:
+  const handleConnectGoogle = () => {
+    // Check if user exists before getting the ID
+    const userId = user?._id || user?.id;
 
+    if (!userId) {
+      toast.error("Please log in again to connect your calendar.");
+      return;
+    }
+    window.location.href = `http://localhost:8000/api/v1/users/google/login?userId=${userId}`;
+  };
   const handleSaveSettings = async () => {
     setIsLoading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      toast.success('Settings saved successfully! ✨');
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      toast.success("Settings saved successfully! ✨");
     } catch (error) {
-      toast.error('Failed to save settings');
+      toast.error("Failed to save settings");
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleDeleteAccount = async () => {
-    if (window.confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
+    if (
+      window.confirm(
+        "Are you sure you want to delete your account? This action cannot be undone."
+      )
+    ) {
       try {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        toast.success('Account deleted. Farewell, mystical alchemist.');
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        toast.success("Account deleted. Farewell, mystical alchemist.");
         logout();
       } catch (error) {
-        toast.error('Failed to delete account');
+        toast.error("Failed to delete account");
       }
     }
   };
 
   const timezones = [
-    'America/New_York',
-    'America/Chicago',
-    'America/Denver',
-    'America/Los_Angeles',
-    'Europe/London',
-    'Europe/Paris',
-    'Asia/Tokyo',
-    'Asia/Shanghai',
-    'Australia/Sydney'
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles",
+    "Europe/London",
+    "Europe/Paris",
+    "Asia/Tokyo",
+    "Asia/Shanghai",
+    "Australia/Sydney",
   ];
 
   const reminderOptions = [
-    { value: '5', label: '5 minutes' },
-    { value: '15', label: '15 minutes' },
-    { value: '30', label: '30 minutes' },
-    { value: '60', label: '1 hour' },
-    { value: '120', label: '2 hours' }
+    { value: "5", label: "5 minutes" },
+    { value: "15", label: "15 minutes" },
+    { value: "30", label: "30 minutes" },
+    { value: "60", label: "1 hour" },
+    { value: "120", label: "2 hours" },
   ];
 
   return (
     <div className="flex h-screen bg-background">
       <Sidebar />
-      
+
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="border-b border-border bg-card/50 backdrop-blur-sm p-6">
           <motion.div
@@ -126,7 +151,6 @@ export function SettingsPage() {
 
         <main className="flex-1 overflow-auto p-6 space-y-6">
           <div className="max-w-4xl mx-auto space-y-6">
-            
             {/* Profile Settings */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -147,7 +171,9 @@ export function SettingsPage() {
                       <Input
                         id="name"
                         value={settings.name}
-                        onChange={(e) => handleSettingChange('name', e.target.value)}
+                        onChange={(e) =>
+                          handleSettingChange("name", e.target.value)
+                        }
                         placeholder="Your alchemist name"
                       />
                     </div>
@@ -157,12 +183,14 @@ export function SettingsPage() {
                         id="email"
                         type="email"
                         value={settings.email}
-                        onChange={(e) => handleSettingChange('email', e.target.value)}
+                        onChange={(e) =>
+                          handleSettingChange("email", e.target.value)
+                        }
                         placeholder="your@email.com"
                       />
                     </div>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="timezone">
                       <div className="flex items-center space-x-2">
@@ -170,14 +198,19 @@ export function SettingsPage() {
                         <span>Timezone</span>
                       </div>
                     </Label>
-                    <Select value={settings.timezone} onValueChange={(value) => handleSettingChange('timezone', value)}>
+                    <Select
+                      value={settings.timezone}
+                      onValueChange={(value) =>
+                        handleSettingChange("timezone", value)
+                      }
+                    >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         {timezones.map((tz) => (
                           <SelectItem key={tz} value={tz}>
-                            {tz.replace('_', ' ')}
+                            {tz.replace("_", " ")}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -204,7 +237,9 @@ export function SettingsPage() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <Label htmlFor="browser-notifications">Browser Notifications</Label>
+                        <Label htmlFor="browser-notifications">
+                          Browser Notifications
+                        </Label>
                         <p className="text-sm text-muted-foreground">
                           Receive alerts in your browser
                         </p>
@@ -212,13 +247,17 @@ export function SettingsPage() {
                       <Switch
                         id="browser-notifications"
                         checked={settings.browserNotifications}
-                        onCheckedChange={(value) => handleSettingChange('browserNotifications', value)}
+                        onCheckedChange={(value) =>
+                          handleSettingChange("browserNotifications", value)
+                        }
                       />
                     </div>
-                    
+
                     <div className="flex items-center justify-between">
                       <div>
-                        <Label htmlFor="email-notifications">Email Notifications</Label>
+                        <Label htmlFor="email-notifications">
+                          Email Notifications
+                        </Label>
                         <p className="text-sm text-muted-foreground">
                           Receive reminder emails
                         </p>
@@ -226,13 +265,17 @@ export function SettingsPage() {
                       <Switch
                         id="email-notifications"
                         checked={settings.emailNotifications}
-                        onCheckedChange={(value) => handleSettingChange('emailNotifications', value)}
+                        onCheckedChange={(value) =>
+                          handleSettingChange("emailNotifications", value)
+                        }
                       />
                     </div>
-                    
+
                     <div className="flex items-center justify-between">
                       <div>
-                        <Label htmlFor="sms-notifications">SMS Notifications</Label>
+                        <Label htmlFor="sms-notifications">
+                          SMS Notifications
+                        </Label>
                         <p className="text-sm text-muted-foreground">
                           Receive text message alerts
                         </p>
@@ -240,18 +283,22 @@ export function SettingsPage() {
                       <Switch
                         id="sms-notifications"
                         checked={settings.smsNotifications}
-                        onCheckedChange={(value) => handleSettingChange('smsNotifications', value)}
+                        onCheckedChange={(value) =>
+                          handleSettingChange("smsNotifications", value)
+                        }
                       />
                     </div>
                   </div>
-                  
+
                   <Separator />
-                  
+
                   <div className="space-y-2">
                     <Label>Reminder Timing</Label>
-                    <Select 
-                      value={settings.reminderBefore} 
-                      onValueChange={(value) => handleSettingChange('reminderBefore', value)}
+                    <Select
+                      value={settings.reminderBefore}
+                      onValueChange={(value) =>
+                        handleSettingChange("reminderBefore", value)
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -285,21 +332,34 @@ export function SettingsPage() {
                 <CardContent className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label htmlFor="google-calendar">Google Calendar Sync</Label>
+                      <Label htmlFor="google-calendar">
+                        Google Calendar Sync
+                      </Label>
                       <p className="text-sm text-muted-foreground">
                         Sync medicine schedules with Google Calendar
                       </p>
                     </div>
-                    <Switch
-                      id="google-calendar"
-                      checked={settings.googleCalendar}
-                      onCheckedChange={(value) => handleSettingChange('googleCalendar', value)}
-                    />
+                    {settings.googleCalendar ? (
+                      <Button variant="success" disabled>
+                        <Calendar className="w-4 h-4 mr-2" /> Connected
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={handleConnectGoogle}
+                        // 🎯 CRITICAL FIX: Add type="button" to prevent form submission 🎯
+                        type="button"
+                        className="magical-glow"
+                      >
+                        Connect Calendar
+                      </Button>
+                    )}
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label htmlFor="apple-health">Apple Health Integration</Label>
+                      <Label htmlFor="apple-health">
+                        Apple Health Integration
+                      </Label>
                       <p className="text-sm text-muted-foreground">
                         Share data with Apple Health app
                       </p>
@@ -307,7 +367,9 @@ export function SettingsPage() {
                     <Switch
                       id="apple-health"
                       checked={settings.appleHealth}
-                      onCheckedChange={(value) => handleSettingChange('appleHealth', value)}
+                      onCheckedChange={(value) =>
+                        handleSettingChange("appleHealth", value)
+                      }
                     />
                   </div>
                 </CardContent>
@@ -366,11 +428,12 @@ export function SettingsPage() {
                   <Alert>
                     <Shield className="w-4 h-4" />
                     <AlertDescription>
-                      Figma Make is not intended for collecting PII or securing sensitive data. 
-                      Please be mindful of the information you share.
+                      Figma Make is not intended for collecting PII or securing
+                      sensitive data. Please be mindful of the information you
+                      share.
                     </AlertDescription>
                   </Alert>
-                  
+
                   <div className="flex items-center justify-between">
                     <div>
                       <Label htmlFor="data-sharing">Data Sharing</Label>
@@ -381,10 +444,12 @@ export function SettingsPage() {
                     <Switch
                       id="data-sharing"
                       checked={settings.dataSharing}
-                      onCheckedChange={(value) => handleSettingChange('dataSharing', value)}
+                      onCheckedChange={(value) =>
+                        handleSettingChange("dataSharing", value)
+                      }
                     />
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <div>
                       <Label htmlFor="analytics">Analytics</Label>
@@ -395,7 +460,9 @@ export function SettingsPage() {
                     <Switch
                       id="analytics"
                       checked={settings.analytics}
-                      onCheckedChange={(value) => handleSettingChange('analytics', value)}
+                      onCheckedChange={(value) =>
+                        handleSettingChange("analytics", value)
+                      }
                     />
                   </div>
                 </CardContent>
@@ -417,7 +484,11 @@ export function SettingsPage() {
                 {isLoading ? (
                   <motion.div
                     animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    transition={{
+                      duration: 1,
+                      repeat: Infinity,
+                      ease: "linear",
+                    }}
                   >
                     <Save className="w-4 h-4" />
                   </motion.div>
@@ -428,7 +499,7 @@ export function SettingsPage() {
                   </>
                 )}
               </Button>
-              
+
               <Button
                 variant="destructive"
                 onClick={handleDeleteAccount}
