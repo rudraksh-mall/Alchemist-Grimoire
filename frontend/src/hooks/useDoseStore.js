@@ -49,6 +49,7 @@ const useDoseStore = create((set, get) => ({
     try {
       const updatedDose = await doseApi.markAsTaken(id, actualTime);
       set(state => ({
+        // Filter is technically redundant if fetchDoses is called immediately after, but kept for robust local state update
         doses: state.doses.map(d => d.id === id ? updatedDose : d),
         upcomingDoses: state.upcomingDoses.filter(d => d.id !== id),
       }));
@@ -64,6 +65,7 @@ const useDoseStore = create((set, get) => ({
     try {
       const updatedDose = await doseApi.markAsSkipped(id, notes);
       set(state => ({
+        // Filter is technically redundant if fetchDoses is called immediately after, but kept for robust local state update
         doses: state.doses.map(d => d.id === id ? updatedDose : d),
         upcomingDoses: state.upcomingDoses.filter(d => d.id !== id),
       }));
@@ -73,6 +75,21 @@ const useDoseStore = create((set, get) => ({
       throw err;
     }
   },
+
+  // 🎯 NEW: Snooze dose action (calls API and triggers a local state refresh)
+  snoozeDose: async (id, durationMinutes = 30) => {
+    try {
+      // The API call updates the scheduledFor time in the database
+      const updatedDose = await doseApi.snoozeDose(id, durationMinutes);
+      
+      // We don't try to update the local state here; we rely on fetchDoses
+      // to pull the updated, re-scheduled dose or see it removed from the upcoming list.
+      return updatedDose;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to snooze dose" });
+      throw err;
+    }
+  }
 }));
 
 export default useDoseStore;

@@ -26,41 +26,48 @@ export function DashboardPage() {
     medicines,
     isLoading: medicinesLoading,
     fetchMedicines,
+    // 🎯 NEW: Destructure the delete action
+    deleteMedicine,
   } = useMedicineStore();
   const {
     upcomingDoses,
     markAsTaken,
     markAsSkipped,
+    // 🎯 NEW: Destructure the snooze action
+    snoozeDose,
     isLoading: dosesLoading,
     fetchDoses,
   } = useDoseStore();
   const [adherenceStats, setAdherenceStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
 
-  // Fetch data once on mount
+  // 🎯 FIX 1: Define fetchStats outside useEffect so it can be reused
+  const fetchStats = async () => {
+    setStatsLoading(true);
+    try {
+      const stats = await statsApi.getAdherence();
+      setAdherenceStats(stats);
+    } catch (error) {
+      toast.error("Failed to load adherence statistics");
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+  
+  // Fetch initial data on mount
   useEffect(() => {
     fetchMedicines();
     fetchDoses();
-  }, []);
+    fetchStats(); // 🎯 Call for initial stats load
+  }, []); // Empty dependency array means run once on mount
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const stats = await statsApi.getAdherence();
-        setAdherenceStats(stats);
-      } catch (error) {
-        toast.error("Failed to load adherence statistics");
-      } finally {
-        setStatsLoading(false);
-      }
-    };
-    fetchStats();
-  }, []);
-
+  // 🎯 FIX 2: Call fetchStats AND fetchDoses after marking a dose as complete
   const handleTakeDose = async (id) => {
     try {
       await markAsTaken(id);
       toast.success("Dose taken! Your wellness journey continues. ✨");
+      fetchDoses(); // Refresh the upcoming doses list immediately
+      fetchStats(); // Refresh stats immediately
     } catch (error) {
       toast.error("Failed to mark dose as taken");
     }
@@ -72,14 +79,58 @@ export function DashboardPage() {
       toast.warning(
         "Dose skipped. Remember, consistency is key to your wellness. 🌙"
       );
+      fetchDoses(); // Refresh the upcoming doses list immediately
+      fetchStats(); // Refresh stats immediately
     } catch (error) {
       toast.error("Failed to skip dose");
+    }
+  };
+
+  // 🎯 NEW: Handler for snoozing a dose (e.g., for 30 minutes)
+  const handleSnoozeDose = async (id) => {
+    try {
+      // You can implement a modal here to ask for duration, 
+      // but for simplicity, we default to 30 minutes.
+      await snoozeDose(id, 30); 
+      toast.info("Dose snoozed! We'll remind you in 30 minutes.");
+      
+      fetchDoses(); // Refresh the upcoming doses list immediately (it should disappear/re-appear later)
+      fetchStats(); // Stats won't change, but it's safe to refresh
+    } catch (error) {
+      toast.error("Failed to snooze dose.");
+      console.error("Snooze failed:", error);
     }
   };
 
   const handleAddMedicine = () => {
     navigate("/schedule/new");
   };
+
+  // 🎯 NEW: Handler for editing a medicine
+  const handleEditMedicine = (medicineId) => {
+    navigate(`/schedule/${medicineId}`);
+  };
+
+  // 🎯 NEW: Handler for deleting a medicine
+  const handleDeleteMedicine = async (medicineId) => {
+    // ⚠️ NOTE: window.confirm is bad practice. Replace with a custom modal in production.
+    if (window.confirm("Are you sure you want to banish this potion from your grimoire? This action cannot be undone.")) {
+      try {
+        await deleteMedicine(medicineId);
+        toast.success("Potion successfully banished!🧹");
+        
+        // Refresh dependent data
+        fetchMedicines(); // Reloads the Active Potions list
+        fetchDoses();     // Update upcoming doses
+        fetchStats();     // Update adherence stats
+        
+      } catch (error) {
+        toast.error("Failed to banish potion.");
+        console.error("Deletion failed:", error);
+      }
+    }
+  };
+
 
   return (
     <div className="flex h-screen bg-background">
@@ -246,6 +297,7 @@ export function DashboardPage() {
                           dose={dose}
                           onTake={handleTakeDose}
                           onSkip={handleSkipDose}
+                          onSnooze={handleSnoozeDose} // 🎯 NEW: Pass the snooze handler
                         />
                       ))
                     ) : (
@@ -281,10 +333,13 @@ export function DashboardPage() {
                       ))
                     ) : medicines.length > 0 ? (
                       medicines.map((medicine) => (
+                        // 🎯 UPDATE: Pass edit and delete handlers
                         <MedicineCard
                           key={medicine.id}
                           medicine={medicine}
-                          showActions={false}
+                          onEdit={handleEditMedicine}
+                          onDelete={handleDeleteMedicine}
+                          showActions={true} // Ensure actions are visible
                         />
                       ))
                     ) : (

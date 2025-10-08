@@ -11,10 +11,17 @@ const router = Router();
 
 router.use(verifyJWT);
 
+// Base routes (POST/GET /v1/medications)
 router.post("/", createMedicationSchedule);
 router.get("/", getMedicationSchedules);
-router.get("/:scheduleId", getMedicationScheduleById);
-router.patch("/:scheduleId", updateMedicationSchedule);
-router.delete("/:scheduleId", deleteMedicationSchedule);
+
+// Routes for specific schedules (using ID parameter)
+router.route("/:scheduleId")
+    .get(getMedicationScheduleById)
+    // 🎯 FIX: Listen for PUT requests (used by frontend updateMedicine)
+    .put(updateMedicationSchedule) 
+    // We keep PATCH for consistency/API design
+    .patch(updateMedicationSchedule)
+    .delete(deleteMedicationSchedule); 
 
 export default router;

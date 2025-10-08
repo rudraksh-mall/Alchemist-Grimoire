@@ -14,8 +14,6 @@ import { Button } from './ui/button';
 
 const navigationItems = [
   { name: 'Grimoire', path: '/dashboard', icon: BookOpen },
-  { name: 'Circus Crier', path: '/reminders', icon: Bell },
-  { name: 'Wellness Crystal', path: '/dashboard', icon: Activity },
   { name: 'Mystic Fortune Teller', path: '/chat', icon: MessageCircle },
   { name: 'Settings', path: '/settings', icon: Settings },
 ];
