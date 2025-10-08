@@ -11,7 +11,6 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { DashboardPage } from "./pages/DashboardPage";
-import { RemindersPage } from "./pages/RemindersPage";
 import { ScheduleFormPage } from "./pages/ScheduleFormPage";
 import { ChatPage } from "./pages/ChatPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -50,15 +49,6 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <DashboardPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              <Route
-                path="/reminders"
-                element={
-                  <ProtectedRoute>
-                    <RemindersPage />
                   </ProtectedRoute>
                 }
               />

@@ -3,10 +3,6 @@ import { create } from "zustand";
 import { api, authApi } from "../services/api.js";
 
 
-console.log(JSON.parse(localStorage.getItem("alchemist_user")));
-// console.log(localStorage.getItem("alchemist_user"));
-
-
 const useAuthStore = create((set, get) => ({
   user: JSON.parse(localStorage.getItem("alchemist_user")) || null,
   accessToken: localStorage.getItem("alchemist_token") || null,
@@ -23,7 +19,6 @@ const useAuthStore = create((set, get) => ({
 
     try {
       const { data } = await api.get("/v1/users/current-user");
-      console.log("Current user fetched:", data);
       set({
         user: data.data,
         accessToken: savedToken,
