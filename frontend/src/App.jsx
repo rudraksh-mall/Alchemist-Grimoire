@@ -10,6 +10,8 @@ import useAuthStore from "./hooks/useAuthStore";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { RemindersPage } from "./pages/RemindersPage";
+
 import { DashboardPage } from "./pages/DashboardPage";
 import { ScheduleFormPage } from "./pages/ScheduleFormPage";
 import { ChatPage } from "./pages/ChatPage";
@@ -35,71 +37,78 @@ export default function App() {
     );
   }
   return (
-      <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-        <Router>
-          <div className="min-h-screen bg-background text-foreground scroll-smooth">
-            <Routes>
-              {/* Public Routes */}
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
+    <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+      <Router>
+        <div className="min-h-screen bg-background text-foreground scroll-smooth">
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
 
-              {/* Protected Routes */}
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute>
-                    <DashboardPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              <Route
-                path="/schedule/:id"
-                element={
-                  <ProtectedRoute>
-                    <ScheduleFormPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              <Route
-                path="/chat"
-                element={
-                  <ProtectedRoute>
-                    <ChatPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              <Route
-                path="/settings"
-                element={
-                  <ProtectedRoute>
-                    <SettingsPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* Redirect root to dashboard */}
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-
-              {/* Catch all route */}
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
-            </Routes>
-
-            {/* Global Toast Notifications */}
-            <Toaster
-              position="top-right"
-              toastOptions={{
-                style: {
-                  background: "var(--card)",
-                  color: "var(--card-foreground)",
-                  border: "1px solid var(--border)",
-                },
-              }}
+            {/* Protected Routes */}
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <DashboardPage />
+                </ProtectedRoute>
+              }
             />
-          </div>
-        </Router>
-      </ThemeProvider>
+            <Route
+              path="/reminders"
+              element={
+                <ProtectedRoute>
+                  <RemindersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/schedule/:id"
+              element={
+                <ProtectedRoute>
+                  <ScheduleFormPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/chat"
+              element={
+                <ProtectedRoute>
+                  <ChatPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <SettingsPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Redirect root to dashboard */}
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+            {/* Catch all route */}
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+
+          {/* Global Toast Notifications */}
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              style: {
+                background: "var(--card)",
+                color: "var(--card-foreground)",
+                border: "1px solid var(--border)",
+              },
+            }}
+          />
+        </div>
+      </Router>
+    </ThemeProvider>
   );
 }
