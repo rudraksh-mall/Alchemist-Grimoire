@@ -110,7 +110,7 @@ export function DoseCard({ dose, onTake, onSkip, onSnooze, showActions = true })
               <Button
                 size="sm"
                 className="flex-1 h-8 magical-glow"
-                onClick={() => onTake?.(dose._id)} // Using dose._id if using Mongoose object
+                onClick={() => onTake?.(dose._id)} // Uses dose._id
               >
                 <Check className="w-3 h-3 mr-1" />
                 Take
@@ -119,7 +119,7 @@ export function DoseCard({ dose, onTake, onSkip, onSnooze, showActions = true })
                 size="sm"
                 variant="outline"
                 className="h-8"
-                onClick={() => onSnooze?.(dose._id)} // Using dose._id
+                onClick={() => onSnooze?.(dose._id)} // Uses dose._id and the new prop
               >
                 <Pause className="w-3 h-3" />
               </Button>
@@ -127,7 +127,7 @@ export function DoseCard({ dose, onTake, onSkip, onSnooze, showActions = true })
                 size="sm"
                 variant="outline"
                 className="h-8 hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => onSkip?.(dose._id)} // Using dose._id
+                onClick={() => onSkip?.(dose._id)} // Uses dose._id
               >
                 <X className="w-3 h-3" />
               </Button>

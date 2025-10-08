@@ -23,28 +23,43 @@ const createDoseLog = asyncHandler(async (req, res) => {
     .json(new ApiResponse(201, doseLog, "Dose log created successfully"));
 });
 
-// REVISED: updateDoseLog (Add logic for actualTime)
+// REVISED: updateDoseLog (Add logic for actualTime and Snooze)
 const updateDoseLog = asyncHandler(async (req, res) => {
   const { logId } = req.params;
-  const { status, notes } = req.body; // status will be 'taken' or 'skipped'
+  const { status, notes, snoozeDurationMinutes } = req.body; // status, notes, AND snooze duration
 
   if (!["taken", "missed", "skipped", "snoozed"].includes(status)) {
     throw new ApiError(400, "Invalid status value");
   }
 
-  const updateFields = { status, notes };
+  let updateFields = { status, notes };
 
-  // 🎯 CRITICAL FIX: Record the time only when marked as taken
   if (status === "taken") {
     updateFields.actualTime = new Date();
   }
 
-  // Note: The 'snoozed' status in your createDoseLog is temporary.
-  // For simplicity, we assume the frontend sends 'taken' or 'skipped'.
+  // 🎯 FIX: Snooze Logic
+  if (status === "snoozed") {
+    const dose = await DoseLog.findOne({ _id: logId, userId: req.user._id });
+    if (!dose) {
+      throw new ApiError(404, "Dose log not found for snoozing");
+    }
 
+    const currentScheduledTime = dose.scheduledFor.getTime(); // Get time in milliseconds
+    const snoozeDelayMs = (snoozeDurationMinutes || 30) * 60 * 1000; // Default to 30 min
+    const newScheduledTime = new Date(currentScheduledTime + snoozeDelayMs);
+    
+    // Update the field to reschedule the dose
+    updateFields = { 
+        status: "pending", // Snoozing sets the status back to pending
+        scheduledFor: newScheduledTime 
+    };
+  }
+
+  // Find the log and apply updates
   const doseLog = await DoseLog.findOneAndUpdate(
     { _id: logId, userId: req.user._id },
-    updateFields, // Use the dynamically created update object
+    updateFields, 
     { new: true }
   );
 
@@ -52,7 +67,6 @@ const updateDoseLog = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Dose log not found");
   }
 
-  // Now returns the updated dose log which the frontend uses to update state
   return res
     .status(200)
     .json(new ApiResponse(200, doseLog, "Dose log updated successfully"));
@@ -80,20 +94,6 @@ const getTodaysDoseLogs = asyncHandler(async (req, res) => {
   console.log(`[DoseLog Controller] Route /v1/dose-logs/today accessed by User: ${req.user._id}`);
   
   const userId = req.user._id;
-
-  /*
-  // ⚠️ CRITICAL STEP MISSING ⚠️
-  // If your dose logs are missing, you MUST ensure that today's logs 
-  // are created for ALL active medications before querying.
-  try {
-      // THIS CALL IS CRITICAL if logs are missing for today
-      // await generateMissingDoses(userId, new Date()); 
-      // console.log("[DoseLog Controller] Generated missing doses for today.");
-  } catch (error) {
-      console.error("[DoseLog Controller] Dose generation failed:", error);
-      // Continue execution even if generation fails
-  }
-  */
   
   // 1. Calculate today's date boundaries in UTC (to match doseCreation.service.js)
   // Get current date, then normalize it to UTC midnight (start of today)
