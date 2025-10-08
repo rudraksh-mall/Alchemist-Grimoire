@@ -37,30 +37,33 @@ export function DashboardPage() {
   const [adherenceStats, setAdherenceStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
 
-  // Fetch data once on mount
+  // 🎯 FIX 1: Define fetchStats outside useEffect so it can be reused
+  const fetchStats = async () => {
+    setStatsLoading(true);
+    try {
+      const stats = await statsApi.getAdherence();
+      setAdherenceStats(stats);
+    } catch (error) {
+      toast.error("Failed to load adherence statistics");
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+  
+  // Fetch initial data on mount
   useEffect(() => {
     fetchMedicines();
     fetchDoses();
-  }, []);
+    fetchStats(); // 🎯 Call for initial stats load
+  }, []); // Empty dependency array means run once on mount
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const stats = await statsApi.getAdherence();
-        setAdherenceStats(stats);
-      } catch (error) {
-        toast.error("Failed to load adherence statistics");
-      } finally {
-        setStatsLoading(false);
-      }
-    };
-    fetchStats();
-  }, []);
-
+  // 🎯 FIX 2: Call fetchStats AND fetchDoses after marking a dose as complete
   const handleTakeDose = async (id) => {
     try {
       await markAsTaken(id);
       toast.success("Dose taken! Your wellness journey continues. ✨");
+      fetchDoses(); // ⬅️ FIX: Refresh the upcoming doses list immediately
+      fetchStats(); // Refresh stats immediately
     } catch (error) {
       toast.error("Failed to mark dose as taken");
     }
@@ -72,6 +75,8 @@ export function DashboardPage() {
       toast.warning(
         "Dose skipped. Remember, consistency is key to your wellness. 🌙"
       );
+      fetchDoses(); // ⬅️ FIX: Refresh the upcoming doses list immediately
+      fetchStats(); // Refresh stats immediately
     } catch (error) {
       toast.error("Failed to skip dose");
     }
