@@ -169,12 +169,18 @@ const getAdherenceStats = asyncHandler(async (req, res) => {
 
   // --- 2. Calculate Weekly Trend (for Line Chart) ---
   const weeklyTrendPipeline = [
-    { $match: { userId, scheduledFor: { $gte: thirtyDaysAgo } } },
+    // 🎯 CRITICAL FIX: Match only COMPLETED doses first to get accurate weekly totals
+    { $match: { 
+        userId, 
+        scheduledFor: { $gte: thirtyDaysAgo },
+        status: { $in: ["taken", "missed", "skipped"] } // Only include completed doses
+    } },
     {
       $group: {
         // Group by week of the year
         _id: { $isoWeek: "$scheduledFor" },
-        total: { $sum: 1 },
+        // Now 'total' correctly represents total COMPLETED doses for the week
+        total: { $sum: 1 }, 
         taken: { $sum: { $cond: [{ $eq: ["$status", "taken"] }, 1, 0] } },
       },
     },
@@ -183,9 +189,7 @@ const getAdherenceStats = asyncHandler(async (req, res) => {
       $project: {
         _id: 0,
         week: { $concat: ["Week ", { $toString: "$_id" }] },
-        // Use $sum in the denominator to only include completed doses 
-        // in the weekly trend calculation if necessary, otherwise use $total.
-        // Assuming $total here includes all relevant logs for the week (pending + completed)
+        // Denominator ($total) is now correct (Total Completed Doses)
         rate: {
           $round: [{ $multiply: [{ $divide: ["$taken", "$total"] }, 100] }, 1],
         },

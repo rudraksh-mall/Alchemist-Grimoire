@@ -1,11 +1,17 @@
 // src/store/useAuthStore.js
 import { create } from "zustand";
-import { api, authApi } from "/src/services/api.js";
+import { api, authApi } from "../services/api.js";
+
+
+console.log(JSON.parse(localStorage.getItem("alchemist_user")));
+// console.log(localStorage.getItem("alchemist_user"));
+
 
 const useAuthStore = create((set, get) => ({
   user: JSON.parse(localStorage.getItem("alchemist_user")) || null,
   accessToken: localStorage.getItem("alchemist_token") || null,
   isLoading: true,
+  
 
   // Initialize authentication state on app mount
   initAuth: async () => {
@@ -17,8 +23,9 @@ const useAuthStore = create((set, get) => ({
 
     try {
       const { data } = await api.get("/v1/users/current-user");
+      console.log("Current user fetched:", data);
       set({
-        user: data.data.user,
+        user: data.data,
         accessToken: savedToken,
         isLoading: false,
       });
