@@ -207,6 +207,16 @@ export const doseApi = {
     });
     return response.data.data;
   },
+
+  // 🎯 NEW: Snooze Dose API endpoint (requests a time extension)
+  snoozeDose: async (logId, durationMinutes = 30) => {
+    // We send the status 'snoozed' and the duration needed
+    const response = await api.put(`/v1/dose-logs/${logId}`, {
+      status: "snoozed",
+      snoozeDurationMinutes: durationMinutes,
+    });
+    return response.data.data;
+  },
 };
 
 export const statsApi = {

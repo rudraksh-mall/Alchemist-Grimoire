@@ -45,17 +45,26 @@ const COLOR_OPTIONS = [
   "#84cc16",
 ];
 
+// Helper function to format ISO dates (e.g., "2025-10-08T...") to "YYYY-MM-DD"
+const formatDateString = (dateString) => {
+  if (!dateString) return "";
+  // Ensure we only take the date part
+  return dateString.split('T')[0];
+};
+
+
 export function ScheduleFormPage() {
   const navigate = useNavigate();
-  const { id } = useParams();
+  // The ID here will come from the URL parameter, used for editing
+  const { id } = useParams(); 
   const { medicines, createMedicine, updateMedicine, fetchMedicines } =
     useMedicineStore();
-  const { fetchDoses } = useDoseStore();
+  const { fetchDoses } = useDoseStore(); // Needed to refresh upcoming doses after update
   const [isLoading, setIsLoading] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
 
   useEffect(() => {
-    fetchMedicines(); // fetch only once on mount
+    fetchMedicines(); // fetch only once on mount to ensure 'medicines' state is populated
   }, []);
 
   const [formData, setFormData] = useState({
@@ -70,19 +79,25 @@ export function ScheduleFormPage() {
 
   useEffect(() => {
     if (id && id !== "new") {
-      const medicine = medicines.find((m) => m.id === id);
+      // 🎯 FIX: Look up by MongoDB's identifier '_id'
+      const medicine = medicines.find((m) => m._id === id); 
       if (medicine) {
         setIsEdit(true);
         setFormData({
           name: medicine.name,
           dosage: medicine.dosage,
           frequency: medicine.frequency,
-          times: medicine.times.length > 0 ? medicine.times : [""],
-          startDate: medicine.startDate,
-          endDate: medicine.endDate || "",
+          // Ensure times is an array, defaulting to [""] if empty
+          times: medicine.times && medicine.times.length > 0 ? medicine.times : [""], 
+          // 🎯 FIX: Format dates for HTML input type="date"
+          startDate: formatDateString(medicine.startDate),
+          endDate: formatDateString(medicine.endDate),
           color: medicine.color,
         });
       }
+    } else {
+        // If navigating from edit back to new, ensure isEdit is false
+        setIsEdit(false);
     }
   }, [id, medicines]);
 
@@ -163,30 +178,24 @@ export function ScheduleFormPage() {
 
       // 1. EXECUTE API CALL
       if (isEdit && id) {
-        await updateMedicine(id, medicineData);
+        // This executes the PUT request for update
+        await updateMedicine(id, medicineData); 
         toast.success("Potion recipe updated successfully! ✨");
       } else {
-        await createMedicine(medicineData);
+        // This executes the POST request for creation
+        await createMedicine(medicineData); 
         toast.success("New potion added to your grimoire! 🧪");
       }
 
       // 2. FORCE RELOAD AND NAVIGATION
       // These must run *after* the API call completes
       await fetchMedicines(); // Reloads Active Potions
-      await fetchDoses(); // Reloads Upcoming Doses (the bug fix)
+      await fetchDoses(); // Reloads Upcoming Doses
 
       navigate("/dashboard");
     } catch (error) {
-      // 🎯 MODIFICATION: We log the error but don't show the redundant 'failed' toast.
-      // Since the potion is confirmed to be saving in the database,
-      // the error is likely a network rejection *after* the DB commit.
       console.error("Form Submission Error (API or follow-up):", error);
 
-      // If the create/update failed entirely (and the save was NOT successful):
-      // The user would be stuck on the form, so we show the error toast.
-      // For stability, we assume the initial success toast will fire on success.
-
-      // If a network error occurred during the fetch/create:
       toast.error(
         `Operation failed: ${error.message || "Check connection to the arena."}`
       );
@@ -194,9 +203,11 @@ export function ScheduleFormPage() {
       setIsLoading(false);
     }
   };
+  
   return (
     <div className="flex h-screen bg-background">
-      <Sidebar />
+      {/* ⚠️ Ensure Sidebar is properly imported and defined in your project ⚠️ */}
+      <Sidebar /> 
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="border-b border-border bg-card/50 backdrop-blur-sm p-6">
           <motion.div

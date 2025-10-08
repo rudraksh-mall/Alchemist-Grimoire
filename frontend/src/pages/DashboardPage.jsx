@@ -33,6 +33,8 @@ export function DashboardPage() {
     upcomingDoses,
     markAsTaken,
     markAsSkipped,
+    // 🎯 NEW: Destructure the snooze action
+    snoozeDose,
     isLoading: dosesLoading,
     fetchDoses,
   } = useDoseStore();
@@ -84,6 +86,22 @@ export function DashboardPage() {
     }
   };
 
+  // 🎯 NEW: Handler for snoozing a dose (e.g., for 30 minutes)
+  const handleSnoozeDose = async (id) => {
+    try {
+      // You can implement a modal here to ask for duration, 
+      // but for simplicity, we default to 30 minutes.
+      await snoozeDose(id, 30); 
+      toast.info("Dose snoozed! We'll remind you in 30 minutes.");
+      
+      fetchDoses(); // Refresh the upcoming doses list immediately (it should disappear/re-appear later)
+      fetchStats(); // Stats won't change, but it's safe to refresh
+    } catch (error) {
+      toast.error("Failed to snooze dose.");
+      console.error("Snooze failed:", error);
+    }
+  };
+
   const handleAddMedicine = () => {
     navigate("/schedule/new");
   };
@@ -95,15 +113,16 @@ export function DashboardPage() {
 
   // 🎯 NEW: Handler for deleting a medicine
   const handleDeleteMedicine = async (medicineId) => {
+    // ⚠️ NOTE: window.confirm is bad practice. Replace with a custom modal in production.
     if (window.confirm("Are you sure you want to banish this potion from your grimoire? This action cannot be undone.")) {
       try {
         await deleteMedicine(medicineId);
         toast.success("Potion successfully banished!🧹");
         
         // Refresh dependent data
-        fetchMedicines(); // Unnecessary but safe reload of the list
-        fetchDoses();     // Important: Update upcoming doses
-        fetchStats();     // Important: Update adherence stats
+        fetchMedicines(); // Reloads the Active Potions list
+        fetchDoses();     // Update upcoming doses
+        fetchStats();     // Update adherence stats
         
       } catch (error) {
         toast.error("Failed to banish potion.");
@@ -278,6 +297,7 @@ export function DashboardPage() {
                           dose={dose}
                           onTake={handleTakeDose}
                           onSkip={handleSkipDose}
+                          onSnooze={handleSnoozeDose} // 🎯 NEW: Pass the snooze handler
                         />
                       ))
                     ) : (
