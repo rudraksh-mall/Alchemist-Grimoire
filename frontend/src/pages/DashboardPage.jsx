@@ -26,6 +26,8 @@ export function DashboardPage() {
     medicines,
     isLoading: medicinesLoading,
     fetchMedicines,
+    // 🎯 NEW: Destructure the delete action
+    deleteMedicine,
   } = useMedicineStore();
   const {
     upcomingDoses,
@@ -62,7 +64,7 @@ export function DashboardPage() {
     try {
       await markAsTaken(id);
       toast.success("Dose taken! Your wellness journey continues. ✨");
-      fetchDoses(); // ⬅️ FIX: Refresh the upcoming doses list immediately
+      fetchDoses(); // Refresh the upcoming doses list immediately
       fetchStats(); // Refresh stats immediately
     } catch (error) {
       toast.error("Failed to mark dose as taken");
@@ -75,7 +77,7 @@ export function DashboardPage() {
       toast.warning(
         "Dose skipped. Remember, consistency is key to your wellness. 🌙"
       );
-      fetchDoses(); // ⬅️ FIX: Refresh the upcoming doses list immediately
+      fetchDoses(); // Refresh the upcoming doses list immediately
       fetchStats(); // Refresh stats immediately
     } catch (error) {
       toast.error("Failed to skip dose");
@@ -85,6 +87,31 @@ export function DashboardPage() {
   const handleAddMedicine = () => {
     navigate("/schedule/new");
   };
+
+  // 🎯 NEW: Handler for editing a medicine
+  const handleEditMedicine = (medicineId) => {
+    navigate(`/schedule/${medicineId}`);
+  };
+
+  // 🎯 NEW: Handler for deleting a medicine
+  const handleDeleteMedicine = async (medicineId) => {
+    if (window.confirm("Are you sure you want to banish this potion from your grimoire? This action cannot be undone.")) {
+      try {
+        await deleteMedicine(medicineId);
+        toast.success("Potion successfully banished!🧹");
+        
+        // Refresh dependent data
+        fetchMedicines(); // Unnecessary but safe reload of the list
+        fetchDoses();     // Important: Update upcoming doses
+        fetchStats();     // Important: Update adherence stats
+        
+      } catch (error) {
+        toast.error("Failed to banish potion.");
+        console.error("Deletion failed:", error);
+      }
+    }
+  };
+
 
   return (
     <div className="flex h-screen bg-background">
@@ -286,10 +313,13 @@ export function DashboardPage() {
                       ))
                     ) : medicines.length > 0 ? (
                       medicines.map((medicine) => (
+                        // 🎯 UPDATE: Pass edit and delete handlers
                         <MedicineCard
                           key={medicine.id}
                           medicine={medicine}
-                          showActions={false}
+                          onEdit={handleEditMedicine}
+                          onDelete={handleDeleteMedicine}
+                          showActions={true} // Ensure actions are visible
                         />
                       ))
                     ) : (

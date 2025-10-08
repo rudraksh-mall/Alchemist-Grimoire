@@ -5,12 +5,19 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 
 export function MedicineCard({ medicine, onEdit, onDelete, showActions = true }) {
-  const handleEdit = () => {
-    if (onEdit) onEdit(medicine);
+  
+  // 🎯 FIX: Pass medicine._id (MongoDB standard) for the Edit handler
+  const handleEdit = (e) => {
+    e.stopPropagation();
+    // The edit handler needs the ID to navigate: /schedule/:id
+    if (onEdit) onEdit(medicine._id);
   };
 
-  const handleDelete = () => {
-    if (onDelete) onDelete(medicine.id);
+  // 🎯 FIX: Pass medicine._id (MongoDB standard) for the Delete handler
+  const handleDelete = (e) => {
+    e.stopPropagation();
+    // The delete handler needs the ID to call the API: /medications/:id
+    if (onDelete) onDelete(medicine._id);
   };
 
   return (
@@ -90,3 +97,4 @@ export function MedicineCard({ medicine, onEdit, onDelete, showActions = true })
     </motion.div>
   );
 }
+
