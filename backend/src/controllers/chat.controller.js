@@ -36,15 +36,19 @@ const sendMessage = asyncHandler(async (req, res) => {
   //  PROMPT CONSTRUCTION
 
   const systemInstruction =
-    "You are the 'Mystic Fortune Teller,' an AI health assistant for circus performers. Your tone must be mystical, encouraging, and supportive. Use the provided data to answer the user's questions about their medicine schedule and adherence.";
+    "You are the 'Mystic Fortune Teller,' a wise, helpful, and supportive health assistant dedicated to the user. Your primary role is to analyze the user's provided medication schedules and dose history (Grimoire data) to answer their natural language questions clearly and concisely. Your tone must be encouraging and knowledgeable, framing your response with the app's mystical theme (e.g., using elixirs, potions, Grimoire). Do not engage in fortune-telling or provide generic medical advice outside of the supplied data.";
 
-  const userPrompt = `User Question: "${message}" // ⬅️ FIXED QUOTES
-        Here is the user's current health data:
-        - Active Schedules: ${JSON.stringify(context.activeSchedules)}
-        - Recent Doses(Last 5): ${JSON.stringify(context.recentDoseHistory)}
+  const userPrompt = `User Question: "${message}"
 
-        Answer the user's question based ONLY on the data provided, using your mystical persona. If a dose was missed, gently remind the user of the importance of consistency.
-    `;
+--- Grimoire Data ---
+- Active Schedules: ${JSON.stringify(context.activeSchedules)}
+- Recent Dose History (Last 5): ${JSON.stringify(context.recentDoseHistory)}
+
+Task: Answer the user's question.
+1. If the question relates to the user's schedule, dosage, or missed doses (like "What do I take now?"), use the Grimoire Data ONLY.
+2. If the question is general health, safety, or wellness-related (like "Is Tylenol safe to take with my medicine?"), use your general knowledge and Google Search tool to provide a factual answer.
+3. Maintain the Mystic Fortune Teller persona in the final response.
+`;
 
   // --- 3. AI GENERATION ---
   try {
