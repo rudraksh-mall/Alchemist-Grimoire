@@ -40,12 +40,34 @@ import { Alert, AlertDescription } from "../components/ui/alert.jsx";
 import { useTheme } from "../components/ThemeProvider.jsx";
 import { toast } from "sonner";
 
+// --- ACTION REQUIRED: VAPID Public Key ---
+// This key must match the one in your backend's .env file.
+const VAPID_PUBLIC_KEY = "BLLw3ROQRrtJUMgLx2CUWjG3UQ5lH0epP_J491eOFAKGFJqPjDfbGSL6sLJKks3sMTtBVWkIJXNwvC26mR1zmek"; 
+// ------------------------------------------
+
+// Helper function to convert the VAPID key base64 string to a Uint8Array
+const urlBase64ToUint8Array = (base64String) => {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+};
+
+
 // Helper function to safely initialize state only once
 const getInitialSettings = (user) => ({
-    name: user?.fullName || "", // Use fullName to match schema
+    name: user?.fullName || "", 
     email: user?.email || "",
     timezone: user?.timezone || "America/New_York",
-    browserNotifications: user?.notificationPreferences?.browser ?? true, 
+    browserNotifications: user?.notificationPreferences?.browser ?? false, // Secure default
     emailNotifications: user?.notificationPreferences?.email ?? false,
     smsNotifications: false,
     reminderBefore: "15",
@@ -64,7 +86,8 @@ export function SettingsPage() {
   const updateCurrentUser = useAuthStore(state => state.updateCurrentUser);
   const disconnectGoogleAuth = useAuthStore(state => state.disconnectGoogleAuth);
   const deleteAccountAction = useAuthStore(state => state.deleteAccountAction);
-  const saveNotificationPreferences = useAuthStore(state => state.saveNotificationPreferences); // <-- NEW ACTION
+  const saveNotificationPreferences = useAuthStore(state => state.saveNotificationPreferences); 
+  const saveBrowserSubscription = useAuthStore(state => state.saveBrowserSubscription); 
   // --- CRITICAL FIX END ---
   
   const { theme, setTheme } = useTheme();
@@ -74,8 +97,14 @@ export function SettingsPage() {
 
   const navigate = useNavigate();
 
-  // Derive stable status value
+  // Derived Values (Accessed directly from user)
   const isGoogleConnected = !!(user?.googleRefreshToken);
+  const currentBrowserPref = user?.notificationPreferences?.browser ?? false;
+  const currentEmailPref = user?.notificationPreferences?.email ?? false;
+  
+  const [reminderBefore, setReminderBefore] = useState("15"); 
+  const [appleHealth, setAppleHealth] = useState(false); 
+
 
   // Initialize state using the function form, which is safer.
   const [settings, setSettings] = useState(() => getInitialSettings(user));
@@ -83,8 +112,8 @@ export function SettingsPage() {
 
   // --- FIX 1: Update settings only when the central user object changes ---
   useEffect(() => {
-    // This runs after login, updateCurrentUser, etc., ensuring local state reflects user data
     if (user) {
+        // This ensures the local settings (name, email, etc.) are synchronized with the global user state
         setSettings(prev => ({
             ...prev,
             name: user.fullName || prev.name,
@@ -95,11 +124,10 @@ export function SettingsPage() {
             googleCalendar: !!user.googleRefreshToken, // Update derived state from user object
         }));
     }
-  }, [user]); // Only depend on the entire user object
+  }, [user]); 
 
   // --- FIX 2: Handle URL OAuth success/error flag and initial navigation ---
   useEffect(() => {
-    // If user is null, redirect to login page immediately (App Protection)
     if (!user) {
         navigate("/login");
         return;
@@ -123,44 +151,151 @@ export function SettingsPage() {
           toast.error(errorMessage);
       }
           
-      // Clean up the URL query parameter after processing
       navigate('/settings', { replace: true }); 
     }
   }, [user, navigate, updateCurrentUser]); 
   
 
   const handleSettingChange = (key, value) => {
-    setSettings((prev) => ({ ...prev, [key]: value }));
+    // This is now only used for unhandled fields like SMS or time selections
+    if (key === 'reminderBefore') {
+        setReminderBefore(value);
+    } else if (key === 'appleHealth') {
+        setAppleHealth(value);
+    } else if (key === 'name' || key === 'email' || key === 'timezone') {
+        // Handle local profile field changes (will be saved in handleSaveSettings)
+        setSettings(prev => ({ ...prev, [key]: value }));
+    }
   };
   
-  // === NEW FUNCTION: Handles the toggle and calls the backend immediately ===
-  const handleUpdateNotifications = async (key, value) => {
-    // 1. Optimistically update local state (for instant visual feedback)
-    handleSettingChange(key, value); 
+  // === PUSH NOTIFICATION LOGIC ===
 
-    setLocalLoading(true);
+  const subscribeUser = async (registration) => {
+      // 🎯 CHECK: This is now a runtime check against the key value
+      if (!VAPID_PUBLIC_KEY || VAPID_PUBLIC_KEY.length < 50) {
+          console.error("VAPID Public Key is missing or too short. Cannot subscribe.");
+          toast.error("VAPID key error. Check key in settings file.");
+          return false;
+      }
+      
+      try {
+        const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+        
+        // Subscribe the service worker to the push service
+        const subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: applicationServerKey,
+        });
+
+        // Send the subscription object to the backend for storage
+        await saveBrowserSubscription(subscription);
+        
+        toast.success("Browser notifications enabled!");
+        return true;
+      } catch (error) {
+        // Log the exact error for debugging
+        console.error("Push subscription failed:", error); 
+        toast.error("Subscription failed. Check console for VAPID key validity.");
+        return false;
+      }
+  };
+
+  const unsubscribeUser = async (registration) => {
     try {
-        // 2. Prepare the new preferences object using the CURRENT settings state
-        const preferences = {
-            browserNotifications: key === 'browserNotifications' ? value : settings.browserNotifications,
-            emailNotifications: key === 'emailNotifications' ? value : settings.emailNotifications,
-        };
-
-        // 3. Call the store action
-        const updatedUser = await saveNotificationPreferences(
-            preferences.browserNotifications, 
-            preferences.emailNotifications
-        );
-
-        // 4. Success: Local store is updated, toast success
-        toast.success(`${key.includes('browser') ? 'Browser' : 'Email'} notifications updated.`);
-
+        const subscription = await registration.pushManager.getSubscription();
+        if (subscription) {
+            // Unsubscribe from the browser's push service
+            await subscription.unsubscribe();
+        }
+        
+        // Send a null subscription to the backend to clear the record
+        await saveBrowserSubscription(null); 
+        toast.info("Browser notifications disabled.");
+        return true;
     } catch (error) {
-        // 5. Failure: Revert the local setting and show error
-        handleSettingChange(key, !value); 
-        toast.error("Failed to save notification settings.");
-    } finally {
+        console.error("Push unsubscription failed:", error);
+        toast.error("Unsubscription failed.");
+        return false;
+    }
+  };
+
+
+  const handleBrowserNotificationToggle = async (value) => {
+    setLocalLoading(true);
+
+    if (!('serviceWorker' in navigator && 'PushManager' in window)) {
+        toast.error("Your browser does not support push notifications.");
         setLocalLoading(false);
+        return false;
+    }
+
+    let success = false;
+
+    if (value) {
+        // --- Subscription Logic (Turning ON) ---
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+            toast.warning("Notification permission denied by user.");
+            success = false;
+        } else {
+            // Register service worker if not already registered
+            const registration = await navigator.serviceWorker.getRegistration('/') || 
+                                 await navigator.serviceWorker.register('/service-worker.js');
+            
+            // CRITICAL FIX: Force unsubscribe old key before subscribing new one to avoid 410 errors
+            const currentSubscription = await registration.pushManager.getSubscription();
+            if (currentSubscription) {
+                await currentSubscription.unsubscribe(); 
+            }
+
+            success = await subscribeUser(registration);
+        }
+        
+        // If subscription succeeds, update DB preference flag
+        await saveNotificationPreferences(success, currentEmailPref); 
+        
+    } else {
+        // --- Unsubscription Logic (Turning OFF) ---
+        const registration = await navigator.serviceWorker.getRegistration('/');
+        if (registration) {
+             success = await unsubscribeUser(registration);
+        } else {
+             // If no registration exists, treat as successful local cleanup
+             success = true;
+        }
+        // Always update preference flag to false if we attempted to turn it off
+        await saveNotificationPreferences(false, currentEmailPref);
+    }
+    
+    // If operation failed, we must revert the UI state
+    if (!success) {
+         setSettings(prev => ({ ...prev, browserNotifications: !value }));
+    }
+
+    setLocalLoading(false);
+    return success;
+  };
+  // ===================================
+
+
+  const handleUpdateNotifications = async (key, value) => {
+    // Note: Local loading is handled inside handleBrowserNotificationToggle for accuracy
+    if (key === 'browserNotifications') {
+        await handleBrowserNotificationToggle(value);
+
+    } else if (key === 'emailNotifications') {
+        setLocalLoading(true);
+        try {
+             // Pass the new email value and the current browser preference
+             await saveNotificationPreferences(currentBrowserPref, value); 
+             toast.success("Email preference updated.");
+        } catch (error) {
+            toast.error("Failed to update email preference.");
+             // Revert the toggle on failure
+            setSettings(prev => ({ ...prev, emailNotifications: !value }));
+        } finally {
+             setLocalLoading(false);
+        }
     }
   };
   // =======================================================================
@@ -199,7 +334,7 @@ export function SettingsPage() {
   const handleSaveSettings = async () => {
     setLocalLoading(true);
     try {
-      // ⚠️ This is still the placeholder for other settings (name, timezone, etc.)
+      // ⚠️ Add actual API call here to save settings (name, timezone, etc.)
       await new Promise((resolve) => setTimeout(resolve, 1000));
       toast.success("Settings saved successfully! ✨");
     } catch (error) {
@@ -268,7 +403,7 @@ export function SettingsPage() {
               <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
                 <Settings className="w-5 h-5 text-primary" />
               </div>
-              <h1 className="text-2xl font-cinzel font-semibold text-foreground">
+              <h1 className="2xl font-cinzel font-semibold text-foreground">
                 Mystical Settings
               </h1>
             </div>
@@ -300,7 +435,7 @@ export function SettingsPage() {
                       <Input
                         id="name"
                         // Display value comes directly from local state
-                        value={settings.name}
+                        value={user?.fullName || ''} // Read from user object
                         onChange={(e) =>
                           handleSettingChange("name", e.target.value)
                         }
@@ -313,7 +448,7 @@ export function SettingsPage() {
                         id="email"
                         type="email"
                         // Display value comes directly from local state
-                        value={settings.email}
+                        value={user?.email || ''} // Read from user object
                         onChange={(e) =>
                           handleSettingChange("email", e.target.value)
                         }
@@ -330,7 +465,7 @@ export function SettingsPage() {
                       </div>
                     </Label>
                     <Select
-                      value={settings.timezone}
+                      value={user?.timezone || 'America/New_York'} // Read from user object
                       onValueChange={(value) =>
                         handleSettingChange("timezone", value)
                       }
@@ -377,7 +512,8 @@ export function SettingsPage() {
                       </div>
                       <Switch
                         id="browser-notifications"
-                        checked={settings.browserNotifications}
+                        // Display value comes from user object
+                        checked={currentBrowserPref} 
                         onCheckedChange={(value) =>
                           handleUpdateNotifications("browserNotifications", value) // <-- CALLS NEW HANDLER
                         }
@@ -396,7 +532,8 @@ export function SettingsPage() {
                       </div>
                       <Switch
                         id="email-notifications"
-                        checked={settings.emailNotifications}
+                        // Display value comes from user object
+                        checked={currentEmailPref}
                         onCheckedChange={(value) =>
                           handleUpdateNotifications("emailNotifications", value) // <-- CALLS NEW HANDLER
                         }
@@ -429,7 +566,7 @@ export function SettingsPage() {
                   <div className="space-y-2">
                     <Label>Reminder Timing</Label>
                     <Select
-                      value={settings.reminderBefore}
+                      value={reminderBefore} // Read from local state
                       onValueChange={(value) =>
                         handleSettingChange("reminderBefore", value)
                       }
@@ -517,7 +654,7 @@ export function SettingsPage() {
                     </div>
                     <Switch
                       id="apple-health"
-                      checked={settings.appleHealth}
+                      checked={appleHealth}
                       onCheckedChange={(value) =>
                         handleSettingChange("appleHealth", value)
                       }

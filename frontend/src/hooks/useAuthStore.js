@@ -169,14 +169,34 @@ const useAuthStore = create((set, get) => ({
   },
   // =========================================================
 
+  // === NEW FEATURE: BROWSER SUBSCRIPTION ACTION ===
+  saveBrowserSubscription: async (subscriptionObject) => {
+    set({ isLoading: true });
+    try {
+      // 1. Call the API to save/update the subscription object
+      const updatedUserResponse = await authApi.saveSubscription(subscriptionObject);
+
+      // 2. Update the local store state with the new user object (which now has the subscription)
+      const updatedUser = updatedUserResponse;
+      localStorage.setItem("alchemist_user", JSON.stringify(updatedUser));
+      set({ user: updatedUser });
+      
+      return updatedUser;
+    } catch (error) {
+      console.error("Failed to save browser subscription:", error);
+      throw error;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+  // ================================================
+
   // === NEW FEATURE: DELETE ACCOUNT ACTION ===
   deleteAccountAction: async () => {
     try {
-        // 1. Execute deletion on the server (which clears the RT cookie in the response)
         await authApi.deleteAccount(); 
         
-        // 2. CRITICAL FIX: Bypass the failing network call in logout.
-        // We manually clear local state to prevent the 401 loop and redirect.
+        // CRITICAL FIX: Bypass the failing network call in logout.
         localStorage.removeItem("alchemist_user");
         localStorage.removeItem("alchemist_token");
         set({ user: null, accessToken: null }); 
@@ -184,7 +204,6 @@ const useAuthStore = create((set, get) => ({
         return true;
     } catch (error) {
         console.error("Account deletion failed:", error);
-        // Ensure logout runs cleanly even if the delete API failed (to clear local tokens)
         get().logout(); 
         throw error;
     }

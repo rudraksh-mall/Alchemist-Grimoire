@@ -8,7 +8,9 @@ import {
   getCurrentUser,
   updateAccountDetails,
   // --- NEW IMPORT FOR NOTIFICATION UPDATE ---
-  updateNotificationPreferences, // <--- NEW IMPORT
+  updateNotificationPreferences, 
+  // --- NEW IMPORT FOR SUBSCRIPTION ---
+  saveBrowserSubscription, // <--- NEW IMPORT
   // ------------------------------------------
   googleAuthLogin,
   googleAuthCallback,
@@ -46,8 +48,12 @@ router.route("/logout").post(logoutUser);
 router.route("/current-user").get(getCurrentUser);
 router.route("/update-details").patch(updateAccountDetails);
 
-// === NEW SECURED ROUTE: UPDATE NOTIFICATIONS ===
-router.route("/notifications").patch(updateNotificationPreferences); // <-- NEW ROUTE
+// === EXISTING SECURED ROUTE: UPDATE NOTIFICATIONS ===
+router.route("/notifications").patch(updateNotificationPreferences); 
+
+// === NEW SECURED ROUTE: BROWSER SUBSCRIPTION ===
+// This handles saving and deleting the push subscription object.
+router.route("/subscribe").post(saveBrowserSubscription); // <--- NEW ROUTE
 
 router.route("/google/disconnect").delete(disconnectGoogle);
 

@@ -40,7 +40,8 @@ const getCookieOptions = () => {
 // Function to safely return a user object without sensitive fields
 const getSafeUser = async (userId) => {
     // NOTE: This now excludes the new OTP fields (emailVerificationToken, emailVerificationExpires)
-    return await User.findById(userId).select("-password -refreshToken -emailVerificationToken -emailVerificationExpires");
+    // We EXCLUDE browserSubscription fields here for security (only backend should know them)
+    return await User.findById(userId).select("-password -refreshToken -emailVerificationToken -emailVerificationExpires -browserSubscription");
 }
 
 // REVISED: generateAccessAndRefreshTokens (Handles token creation and saving)
@@ -337,6 +338,61 @@ const updateNotificationPreferences = asyncHandler(async (req, res) => {
 // ====================================================
 
 
+// === NEW FEATURE: BROWSER SUBSCRIPTION CONTROLLER ===
+const saveBrowserSubscription = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    // The request body should contain the PushSubscription object from the frontend
+    const subscription = req.body.subscription;
+    
+    if (!subscription || !subscription.endpoint || !subscription.keys) {
+        // If the subscription is null or missing required fields, treat it as an unsubscribe request.
+        
+        // 1. Update the User document to clear the subscription field
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            { 
+                $set: { "browserSubscription": null } 
+            },
+            { new: true }
+        );
+        
+        if (!updatedUser) {
+            throw new ApiError(404, "User not found.");
+        }
+        
+        const userSafe = await getSafeUser(userId);
+        
+        return res
+            .status(200)
+            .json(new ApiResponse(200, userSafe, "Browser unsubscribed successfully."));
+    }
+
+    // 2. If the subscription is valid, update the User document to save it.
+    const updatedUser = await User.findByIdAndUpdate(
+        userId,
+        {
+            $set: { 
+                "browserSubscription": subscription,
+                // Ensure the notification preference is ON if they just subscribed
+                "notificationPreferences.browser": true
+            }
+        },
+        { new: true } 
+    );
+    
+    if (!updatedUser) {
+        throw new ApiError(404, "User not found for subscription.");
+    }
+
+    const userSafe = await getSafeUser(userId);
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, userSafe, "Browser subscribed successfully."));
+});
+// ====================================================
+
+
 // === NEW FEATURE: DELETE ACCOUNT CONTROLLER ===
 const deleteAccount = asyncHandler(async (req, res) => {
     const userId = req.user._id; // User ID attached by verifyJWT middleware
@@ -481,9 +537,10 @@ export {
   refreshAccessToken,
   getCurrentUser,
   updateAccountDetails,
-  updateNotificationPreferences, // <-- NEW EXPORT
+  updateNotificationPreferences, // <-- EXPORTED NOTIFICATION TOGGLE UPDATER
+  saveBrowserSubscription, // <-- NEW EXPORT
   googleAuthCallback,
   googleAuthLogin,
   disconnectGoogle,
-  deleteAccount // <-- NEW EXPORT
+  deleteAccount // <-- EXPORTED DELETE ACCOUNT
 };

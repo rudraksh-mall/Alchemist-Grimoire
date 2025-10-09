@@ -141,30 +141,26 @@ export const chatApi = {
   },
 };
 
-// --- AUTH API: Implements two-step OTP flow using /users paths and new DELETE method ---
+// --- AUTH API: Implements two-step OTP flow using /users paths and new features ---
 export const authApi = {
-  // CRITICAL FIX: Registration no longer returns tokens/user object.
   register: async (email, password, fullName) => {
     const { data } = await api.post(
       "/users/register",
       { fullName, email, password },
       { withCredentials: true }
     );
-    // FIX: Return the email for the RegisterPage component to use for Step 2
     return data.data.email; 
   },
   
-  // FIX 1: OTP Step 1 (Login/Send Code)
   login: async (email, password) => {
     const { data } = await api.post(
       "/users/login", 
       { email, password },
       { withCredentials: true }
     );
-    return data.data.email; // Returns email upon successful OTP dispatch
+    return data.data.email; 
   },
 
-  // FIX 2: OTP Step 2 (Verify Code/Final Login)
   verifyOtp: async (email, otp) => {
     const { data } = await api.post(
       "/users/verify-otp", 
@@ -177,6 +173,24 @@ export const authApi = {
     };
   },
 
+  // === NEW FEATURE: UPDATE NOTIFICATIONS ===
+  updateNotifications: async (preferences) => {
+    // PATCH /v1/users/notifications
+    const response = await api.patch("/users/notifications", preferences);
+    return response.data.data; // Should return the updated user object
+  },
+  // =========================================
+
+  // === NEW FEATURE: BROWSER SUBSCRIPTION API ===
+  saveSubscription: async (subscriptionObject) => {
+    // POST /v1/users/subscribe
+    const response = await api.post("/users/subscribe", {
+      subscription: subscriptionObject,
+    });
+    return response.data.data; // Returns the updated user object
+  },
+  // ===========================================
+
   // === NEW FEATURE: DELETE ACCOUNT ===
   deleteAccount: async () => {
     const response = await api.delete("/users/delete-account");
@@ -185,14 +199,6 @@ export const authApi = {
     return response.data;
   },
   // ===================================
-  
-  // === NEW FEATURE: UPDATE NOTIFICATIONS ===
-  updateNotifications: async (preferences) => {
-    // PATCH /v1/users/notifications
-    const response = await api.patch("/users/notifications", preferences);
-    return response.data.data; // Should return the updated user object
-  },
-  // =========================================
 
   disconnectGoogle: async () => {
     const response = await api.delete("/users/google/disconnect"); 

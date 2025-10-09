@@ -55,7 +55,27 @@ const userSchema = new Schema(
         type: Boolean,
         default: true,
       },
+      // sms: { type: Boolean, default: true } // Can be added later if needed
     },
+
+    // --- NEW FIELD: Browser Push Subscription ---
+    browserSubscription: {
+      type: {
+        // The unique push endpoint provided by the browser (required for Web Push)
+        endpoint: { type: String, trim: true },
+        // The time when the subscription should expire
+        expirationTime: { type: Date, default: null },
+        keys: {
+          // Encryption key for payload data
+          p256dh: { type: String, trim: true },
+          // Authentication secret
+          auth: { type: String, trim: true },
+        },
+      },
+      // Use null to explicitly indicate that the user has not subscribed or has unsubscribed
+      default: null,
+    },
+    // --- END NEW FIELD ---
 
     googleRefreshToken: {
       type: String,
