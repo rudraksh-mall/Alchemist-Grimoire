@@ -1,6 +1,3 @@
-// Mock API service for Alchemist's Grand Grimoire
-// In production, replace with actual API endpoints
-
 import axios from "axios";
 
 export const api = axios.create({
@@ -258,6 +255,14 @@ export const authApi = {
       user: data.data.user,
       accessToken: data.data.token, // ✅ corrected
     };
+  },
+
+  // 🎯 NEW METHOD: Disconnects Google Calendar
+  disconnectGoogle: async () => {
+    // Assuming backend route: DELETE /v1/users/google/disconnect
+    // This endpoint should clear the token on the server side.
+    const response = await api.delete("/v1/users/google/disconnect"); 
+    return response.data;
   },
 
   logout: async () => {

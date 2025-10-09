@@ -13,6 +13,8 @@ import {
   Sun,
   Save,
   Trash2,
+  Check, 
+  Link, 
 } from "lucide-react";
 import useAuthStore from "../hooks/useAuthStore";
 import { Sidebar } from "../components/Sidebar";
@@ -39,48 +41,111 @@ import { useTheme } from "../components/ThemeProvider";
 import { toast } from "sonner";
 
 export function SettingsPage() {
-  const { user, logout } = useAuthStore();
+  // 🎯 FIX: Destructure disconnectGoogleAuth (assuming implemented in useAuthStore)
+  const { user, logout, updateCurrentUser, disconnectGoogleAuth } = useAuthStore(); 
   const { theme, setTheme } = useTheme();
-  const [isDarkMode, setIsDarkMode] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
   const navigate = useNavigate();
 
+  // 🎯 CRITICAL FIX 1: Derive connection status from the token presence
+  const isGoogleConnected = !!(user?.googleRefreshToken);
+
+  // 🎯 CRITICAL FIX 2: Check URL for OAuth success/error flag and refresh user state
   useEffect(() => {
-    if (!user) navigate("/login");
-  }, [user]);
+    if (!user) {
+        navigate("/login");
+        return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const calendarSyncSuccess = params.get('calendar_sync');
+    const calendarSyncError = params.get('error');
+
+    if (calendarSyncSuccess === 'success') {
+        toast.success("Calendar connected successfully! Syncing potions.");
+        updateCurrentUser(); // Force state update to show 'Connected'
+    } else if (calendarSyncError) {
+        let errorMessage = "Synchronization failed. Please try again.";
+        
+        if (calendarSyncError === 'no_refresh_token') {
+            errorMessage = "Connection failed: Google did not grant permanent access. Please ensure you grant full access when prompted.";
+        } else if (calendarSyncError === 'access_denied') {
+            errorMessage = "Connection denied by user.";
+        }
+
+        toast.error(errorMessage);
+    }
+        
+    // Clean up the URL query parameter after processing
+    if (calendarSyncSuccess || calendarSyncError) {
+        navigate('/settings', { replace: true }); 
+    }
+
+  }, [user, navigate, updateCurrentUser]); 
 
   const [settings, setSettings] = useState({
     name: user?.name || "",
     email: user?.email || "",
-    timezone: "America/New_York",
+    timezone: user?.timezone || "America/New_York",
     browserNotifications: true,
     emailNotifications: false,
     smsNotifications: false,
     reminderBefore: "15",
-    googleCalendar: false,
+    // Initialize state using the derived status
+    googleCalendar: isGoogleConnected, 
     appleHealth: false,
     dataSharing: false,
     analytics: true,
   });
 
+  // Listen to changes in isGoogleConnected to update the local state when the user object updates
+  useEffect(() => {
+    setSettings(prev => ({ ...prev, googleCalendar: isGoogleConnected }));
+  }, [isGoogleConnected]);
+  
+
   const handleSettingChange = (key, value) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
   };
-  // Ensure this URL is correct:
+
   const handleConnectGoogle = () => {
-    // Check if user exists before getting the ID
     const userId = user?._id || user?.id;
 
     if (!userId) {
       toast.error("Please log in again to connect your calendar.");
       return;
     }
+    
+    // Redirect to backend endpoint for OAuth login flow
     window.location.href = `http://localhost:8000/api/v1/users/google/login?userId=${userId}`;
   };
+
+  // 🎯 FINAL IMPLEMENTATION: Handle disconnection
+  const handleDisconnectGoogle = async () => {
+    if (!window.confirm("Are you sure you want to disconnect Google Calendar?")) {
+        return;
+    }
+
+    setIsLoading(true);
+    try {
+        // Calls the store action to send DELETE request and clear token in DB
+        await disconnectGoogleAuth(); 
+        toast.success("Google Calendar disconnected successfully.");
+        // updateCurrentUser() is called inside disconnectGoogleAuth
+    } catch (error) {
+        toast.error("Failed to disconnect calendar.");
+        console.error("Disconnect error:", error);
+    } finally {
+        setIsLoading(false);
+    }
+  }
+
+
   const handleSaveSettings = async () => {
     setIsLoading(true);
     try {
+      // ⚠️ Add actual API call here to save settings (timezone, notifications, etc.)
       await new Promise((resolve) => setTimeout(resolve, 1000));
       toast.success("Settings saved successfully! ✨");
     } catch (error) {
@@ -97,6 +162,7 @@ export function SettingsPage() {
       )
     ) {
       try {
+        // ⚠️ Add actual API call here to delete the user account
         await new Promise((resolve) => setTimeout(resolve, 1000));
         toast.success("Account deleted. Farewell, mystical alchemist.");
         logout();
@@ -341,14 +407,28 @@ export function SettingsPage() {
                         Sync medicine schedules with Google Calendar
                       </p>
                     </div>
-                    {settings.googleCalendar ? (
-                      <Button variant="success" disabled>
-                        <Calendar className="w-4 h-4 mr-2" /> Connected
-                      </Button>
+                    {/* 🎯 Updated Conditional Rendering */}
+                    {isGoogleConnected ? (
+                      <div className="flex space-x-2">
+                        <Button 
+                          variant="success" 
+                          disabled 
+                          className="bg-green-500 hover:bg-green-600 text-white"
+                        >
+                          <Check className="w-4 h-4 mr-2" /> Connected
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={handleDisconnectGoogle}
+                          type="button"
+                          className="hover:bg-red-500/10 hover:text-red-400"
+                        >
+                          <Link className="w-4 h-4" />
+                        </Button>
+                      </div>
                     ) : (
                       <Button
                         onClick={handleConnectGoogle}
-                        // 🎯 CRITICAL FIX: Add type="button" to prevent form submission 🎯
                         type="button"
                         className="magical-glow"
                       >
