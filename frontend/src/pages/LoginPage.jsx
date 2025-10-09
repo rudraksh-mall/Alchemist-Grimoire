@@ -1,58 +1,119 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, Link } from "react-router-dom";
-import { Sparkles, Mail, Lock, Eye, EyeOff } from "lucide-react";
-import useAuthStore from "../hooks/useAuthStore";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { Label } from "../components/ui/label";
+import { Sparkles, Mail, Lock, Eye, EyeOff, KeyRound, Loader2 } from "lucide-react";
+// FIX: Added explicit file extensions to resolve compiler errors
+import useAuthStore from "../hooks/useAuthStore.js"; 
+import { Button } from "../components/ui/button.jsx"; 
+import { Input } from "../components/ui/input.jsx"; 
+import { Label } from "../components/ui/label.jsx"; 
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from "../components/ui/card";
-import { Separator } from "../components/ui/separator";
+} from "../components/ui/card.jsx"; 
+import { Separator } from "../components/ui/separator.jsx"; 
 import { toast } from "sonner";
+import { authApi } from '../services/api.js'; // Added .js extension
 
 export function LoginPage() {
-  const [email, setEmail] = useState("demo@alchemist.com");
-  const [password, setPassword] = useState("demo123");
-  const [showPassword, setShowPassword] = useState(false);
-  // Add this hook inside the LoginPage function:
+  // FIX: Separate state access to prevent creating a new object on every render.
+  // This is the safest way to consume Zustand state and actions without useShallow.
+  const user = useAuthStore(state => state.user);
+  const storeLoading = useAuthStore(state => state.isLoading);
+  const finalizeLogin = useAuthStore(state => state.finalizeLogin);
+  const googleAuth = useAuthStore(state => state.googleAuth);
 
-  // Access the user object from the store
-  const { user, login, googleAuth, isLoading } = useAuthStore();
   const navigate = useNavigate();
 
-  // 🎯 FIX: Navigation Watcher Hook 🎯
+  // --- NEW STATE FOR OTP FLOW ---
+  const [step, setStep] = useState(1); 
+  const [email, setEmail] = useState("demo@alchemist.com");
+  const [password, setPassword] = useState("demo123");
+  const [otp, setOtp] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [localLoading, setLocalLoading] = useState(false);
+  // --- END NEW STATE ---
+
+  const isLoading = storeLoading || localLoading;
+
+  // Navigation Watcher Hook
   useEffect(() => {
-    // If the user object is now defined (login was successful), navigate away.
     if (user) {
       navigate("/dashboard");
     }
-  }, [user, navigate]); // Reruns whenever the user state changes
+  }, [user, navigate]); 
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!email || !password) return;
+  // --- Step 1: Handle Initial Login (Send OTP) ---
+  const handleSendOtp = async (e) => {
+    // Check if event object exists before calling preventDefault
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
+    
+    // CRITICAL: Prevent resend if the main fields are empty.
+    if (!email || !password) {
+      toast.error("Please enter both email and password.");
+      return;
+    }
 
+    setLocalLoading(true);
     try {
-      const loggedInUser = await login(email, password);
-      if (loggedInUser) {
-        toast.success("Welcome back, mystical alchemist!"); // ❌ DELETE THIS LINE: navigate('/dashboard');
-      }
+      // 🎯 FIX 1: Use authApi.login (which calls /users/login)
+      const sentEmail = await authApi.login(email, password); 
+      
+      // 2. Success: Move to the verification step
+      toast.info(`The Circus Crier has dispatched a code to ${sentEmail}!`);
+      setStep(2);
     } catch (error) {
-      toast.error("Invalid credentials. Please try again.");
+      // Use general error handling since backend is now responsible for precise status codes
+      const errorMessage = error.response?.data?.message || "Login failed. Invalid credentials or server error.";
+      toast.error(errorMessage);
+      setStep(1); 
+    } finally {
+      setLocalLoading(false);
     }
   };
 
+  // --- Step 2: Handle OTP Verification and Final Login ---
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    if (!email || !otp) return;
+    
+    setLocalLoading(true);
+    try {
+      // 🎯 FIX 2: Use authApi.verifyOtp (which calls /users/verify-otp)
+      const { user: loggedInUser, accessToken } = await authApi.verifyOtp(email, otp);
+      
+      // 2. Success: Manually update the global auth store state using the action we aliased
+      finalizeLogin(loggedInUser, accessToken); 
+
+      toast.success("OTP verified! Welcome back, mystical alchemist!");
+      // Navigation is handled by the useEffect hook
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || "OTP verification failed. Check your code or request a new one.";
+      toast.error(errorMessage);
+    } finally {
+      setLocalLoading(false);
+    }
+  };
+
+
   const handleGoogleAuth = async () => {
+    setLocalLoading(true);
     try {
       await googleAuth();
     } catch (error) {
       toast.error("Google authentication failed.");
+    } finally {
+      setLocalLoading(false);
     }
+  };
+
+  const handleBack = () => {
+    setOtp(''); 
+    setStep(1);
   };
 
   return (
@@ -82,7 +143,7 @@ export function LoginPage() {
             repeat: Infinity,
             ease: "easeInOut",
           }}
-        />
+        /> 
       </div>
 
       <motion.div
@@ -104,85 +165,142 @@ export function LoginPage() {
 
             <div>
               <CardTitle className="text-2xl font-cinzel text-card-foreground">
-                Alchemist's Grand Grimoire
+                {step === 1 ? "Alchemist's Grand Grimoire" : "Circus Crier Code"}
               </CardTitle>
               <p className="text-muted-foreground mt-2">
-                Enter the mystical realm of wellness
+                {step === 1 
+                  ? "Enter the mystical realm of wellness" 
+                  : `Enter the code sent to ${email} to proceed.`
+                }
               </p>
             </div>
           </CardHeader>
 
           <CardContent className="space-y-6">
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-card-foreground">
-                  Mystical Email
-                </Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10"
-                    placeholder="your@email.com"
-                    required
-                  />
-                </div>
-              </div>
+            <form onSubmit={step === 1 ? handleSendOtp : handleVerifyOtp} className="space-y-4">
+              
+              {/* --- STEP 1: Email and Password Input --- */}
+              {step === 1 && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="email" className="text-card-foreground">
+                      Mystical Email
+                    </Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="pl-10"
+                        placeholder="your@email.com"
+                        required
+                      />
+                    </div>
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-card-foreground">
-                  Secret Incantation
-                </Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 pr-10"
-                    placeholder="Enter your password"
-                    required
-                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="password" className="text-card-foreground">
+                      Secret Incantation
+                    </Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="pl-10 pr-10"
+                        placeholder="Enter your password"
+                        required
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-1 top-1 h-8 w-8 p-0"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
                   <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-1 top-1 h-8 w-8 p-0"
-                    onClick={() => setShowPassword(!showPassword)}
+                    type="submit"
+                    className="w-full magical-glow"
+                    disabled={isLoading}
                   >
-                    {showPassword ? (
-                      <EyeOff className="w-4 h-4" />
+                    {isLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
-                      <Eye className="w-4 h-4" />
+                      "Send Verification Code"
                     )}
                   </Button>
-                </div>
-              </div>
+                </>
+              )}
 
-              <Button
-                type="submit"
-                className="w-full magical-glow"
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{
-                      duration: 1,
-                      repeat: Infinity,
-                      ease: "linear",
-                    }}
+              {/* --- STEP 2: OTP Input --- */}
+              {step === 2 && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="otp" className="text-card-foreground">
+                      One-Time Password
+                    </Label>
+                    <div className="relative">
+                      <KeyRound className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="otp"
+                        type="text"
+                        value={otp}
+                        onChange={(e) => setOtp(e.target.value)}
+                        className="pl-10 text-center text-lg tracking-widest"
+                        placeholder="1 2 3 4 5 6"
+                        maxLength={6}
+                        required
+                        autoFocus
+                      />
+                    </div>
+                    <Button
+                        type="button"
+                        variant="link"
+                        // Call handleSendOtp without event, relying on the check inside the handler
+                        onClick={() => handleSendOtp()} 
+                        disabled={isLoading}
+                        className="p-0 h-4 text-xs text-yellow-400 hover:text-yellow-300"
+                    >
+                        Resend Code
+                    </Button>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full magical-glow"
+                    disabled={isLoading}
                   >
-                    <Sparkles className="w-4 h-4" />
-                  </motion.div>
-                ) : (
-                  "Enter the Grimoire"
-                )}
-              </Button>
+                    {isLoading ? (
+                       <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      "Enter the Grimoire (Verify)"
+                    )}
+                  </Button>
+                  
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={handleBack}
+                    disabled={isLoading}
+                  >
+                    Go Back
+                  </Button>
+                </>
+              )}
             </form>
 
             <div className="relative">

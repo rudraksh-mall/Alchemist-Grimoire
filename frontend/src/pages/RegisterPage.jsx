@@ -1,75 +1,127 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
-import { Sparkles, Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
-import useAuthStore from '../hooks/useAuthStore';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Separator } from '../components/ui/separator';
+import { Sparkles, Mail, Lock, User, Eye, EyeOff, KeyRound, Loader2 } from 'lucide-react';
+// FIX: Adjusting path depth one last time to resolve persistent compiler errors
+import useAuthStore from '../hooks/useAuthStore.js'; 
+import { Button } from '../components/ui/button.jsx'; 
+import { Input } from '../components/ui/input.jsx'; 
+import { Label } from '../components/ui/label.jsx'; 
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card.jsx';
+import { Separator } from '../components/ui/separator.jsx';
 import { toast } from 'sonner';
+import { authApi } from '../services/api.js';
 
 export function RegisterPage() {
+  // Access store state and actions
+  const user = useAuthStore(state => state.user);
+  const storeLoading = useAuthStore(state => state.isLoading);
+  const finalizeLogin = useAuthStore(state => state.finalizeLogin); // Used for Step 3
+  const googleAuth = useAuthStore(state => state.googleAuth);
+
+  const navigate = useNavigate();
+
+  // --- STATE MODIFICATIONS FOR OTP FLOW ---
+  const [step, setStep] = useState(1); // 1: Register, 2: OTP
   const [formData, setFormData] = useState({
-    name: '',
+    fullName: '', 
     email: '',
     password: '',
     confirmPassword: ''
   });
+  const [otp, setOtp] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const { register, googleAuth, user } = useAuthStore();
-  const navigate = useNavigate();
+  const [localLoading, setLocalLoading] = useState(false);
+  
+  const isLoading = storeLoading || localLoading;
 
+  // Navigation Watcher Hook
   useEffect(() => {
     if (user) navigate('/dashboard');
-  }, [user]);
+  }, [user, navigate]);
 
   const handleChange = (e) => {
     setFormData(prev => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [e.target.name === 'name' ? 'fullName' : e.target.name]: e.target.value
     }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // --- Step 1: Handle Initial Registration (Create User & Send OTP) ---
+  const handleRegister = async (e) => {
+    e.preventDefault(); 
 
     if (formData.password !== formData.confirmPassword) {
-      toast.error('Passwords do not match');
+      toast.error('Incantations (Passwords) do not match');
       return;
     }
-
     if (formData.password.length < 6) {
       toast.error('Password must be at least 6 characters');
       return;
     }
-
-    setIsLoading(true);
+    
+    // Check required fields based on the step
+    if (!formData.fullName || !formData.email || !formData.password) {
+        toast.error('Please fill in all mystical fields.');
+        return;
+    }
+    
+    setLocalLoading(true);
     try {
-      await register(formData.email, formData.password, formData.name);
-      toast.success('Welcome to the mystical realm!');
-      navigate('/dashboard');
+      // 1. Call authApi.register. This API call must now trigger the OTP sending on the backend.
+      await authApi.register(formData.email, formData.password, formData.fullName);
+      
+      // 2. Success: Move to the verification step
+      toast.info(`Grimoire created! A verification code has been dispatched to ${formData.email}.`);
+      setStep(2); // Move to verification step
     } catch (error) {
-      toast.error('Registration failed. Please try again.');
+      const errorMessage = error.response?.data?.message || 'Registration failed. This email may already be in the grimoire.';
+      toast.error(errorMessage);
     } finally {
-      setIsLoading(false);
+      setLocalLoading(false);
+    }
+  };
+  
+  // --- Step 2: Handle OTP Verification and Final Login ---
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    if (!formData.email || !otp) return;
+    
+    setLocalLoading(true);
+    try {
+      // 1. Use authApi.verifyOtp to check the code and exchange it for tokens
+      const { user: loggedInUser, accessToken } = await authApi.verifyOtp(formData.email, otp);
+      
+      // 2. Success: Manually update the global auth store state
+      finalizeLogin(loggedInUser, accessToken); 
+
+      toast.success("Verification complete! Welcome to the Alchemist's Arena!");
+      // Navigation is handled by the useEffect hook
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || "OTP verification failed. Check your code or request a new one.";
+      toast.error(errorMessage);
+    } finally {
+      setLocalLoading(false);
     }
   };
 
+
   const handleGoogleAuth = async () => {
-    setIsLoading(true);
+    setLocalLoading(true);
     try {
       await googleAuth();
       toast.success('Welcome via the magical portal!');
-      navigate('/dashboard');
     } catch (error) {
       toast.error('Google authentication failed.');
     } finally {
-      setIsLoading(false);
+      setLocalLoading(false);
     }
+  };
+
+  const handleBack = () => {
+    setOtp('');
+    setStep(1);
   };
 
   return (
@@ -107,122 +159,184 @@ export function RegisterPage() {
 
             <div>
               <CardTitle className="text-2xl font-cinzel text-card-foreground">
-                Create Your Grimoire
+                {step === 1 ? "Create Your Grimoire" : "Circus Crier Code"}
               </CardTitle>
               <p className="text-muted-foreground mt-2">
-                Begin your mystical wellness journey
+                {step === 1 
+                  ? "Forge your mystical account" 
+                  : `Enter the code sent to ${formData.email} to activate your account.`
+                }
               </p>
             </div>
           </CardHeader>
 
           <CardContent className="space-y-6">
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-card-foreground">
-                  Alchemist Name
-                </Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="name"
-                    name="name"
-                    type="text"
-                    value={formData.name}
-                    onChange={handleChange}
-                    className="pl-10"
-                    placeholder="Your mystical name"
-                    required
-                  />
-                </div>
-              </div>
+            <form onSubmit={step === 1 ? handleRegister : handleVerifyOtp} className="space-y-4">
+              
+              {/* --- STEP 1: Registration Fields --- */}
+              {step === 1 && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="fullName" className="text-card-foreground">
+                      Alchemist Name
+                    </Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="fullName"
+                        name="fullName"
+                        type="text"
+                        value={formData.fullName} 
+                        onChange={handleChange}
+                        className="pl-10"
+                        placeholder="The Great Sebastiano"
+                        required
+                      />
+                    </div>
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-card-foreground">
-                  Mystical Email
-                </Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    className="pl-10"
-                    placeholder="your@email.com"
-                    required
-                  />
-                </div>
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email" className="text-card-foreground">
+                      Mystical Email
+                    </Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="email"
+                        name="email"
+                        type="email"
+                        value={formData.email}
+                        onChange={handleChange}
+                        className="pl-10"
+                        placeholder="your@email.com"
+                        required
+                      />
+                    </div>
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-card-foreground">
-                  Secret Incantation
-                </Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    value={formData.password}
-                    onChange={handleChange}
-                    className="pl-10 pr-10"
-                    placeholder="Create your password"
-                    required
-                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="password" className="text-card-foreground">
+                      Secret Incantation
+                    </Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="password"
+                        name="password"
+                        type={showPassword ? "text" : "password"}
+                        value={formData.password}
+                        onChange={handleChange}
+                        className="pl-10 pr-10"
+                        placeholder="Create your password"
+                        required
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-1 top-1 h-8 w-8 p-0"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="confirmPassword" className="text-card-foreground">
+                      Confirm Incantation
+                    </Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="confirmPassword"
+                        name="confirmPassword"
+                        type={showConfirmPassword ? "text" : "password"}
+                        value={formData.confirmPassword}
+                        onChange={handleChange}
+                        className="pl-10 pr-10"
+                        placeholder="Confirm your password"
+                        required
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-1 top-1 h-8 w-8 p-0"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Button type="submit" className="w-full magical-glow" disabled={isLoading}>
+                    {isLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      'Register & Send Verification Code'
+                    )}
+                  </Button>
+                </>
+              )}
+
+              {/* --- STEP 2: OTP Input --- */}
+              {step === 2 && (
+                 <>
+                  <div className="space-y-2">
+                    <Label htmlFor="otp" className="text-card-foreground">
+                      One-Time Password
+                    </Label>
+                    <div className="relative">
+                      <KeyRound className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="otp"
+                        type="text"
+                        value={otp}
+                        onChange={(e) => setOtp(e.target.value)}
+                        className="pl-10 text-center text-lg tracking-widest"
+                        placeholder="1 2 3 4 5 6"
+                        maxLength={6}
+                        required
+                        autoFocus
+                      />
+                    </div>
+                    {/* Resend button calls handleRegister which re-sends the code */}
+                    <Button
+                        type="button"
+                        variant="link"
+                        // This calls handleRegister without an event, forcing the resend logic
+                        onClick={handleRegister} 
+                        disabled={isLoading}
+                        className="p-0 h-4 text-xs text-yellow-400 hover:text-yellow-300"
+                    >
+                        Resend Code
+                    </Button>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full magical-glow"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                       <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      "Verify & Enter Grimoire"
+                    )}
+                  </Button>
+                  
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-1 top-1 h-8 w-8 p-0"
-                    onClick={() => setShowPassword(!showPassword)}
+                    variant="outline"
+                    className="w-full"
+                    onClick={handleBack}
+                    disabled={isLoading}
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    Go Back
                   </Button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-card-foreground">
-                  Confirm Incantation
-                </Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    type={showConfirmPassword ? "text" : "password"}
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    className="pl-10 pr-10"
-                    placeholder="Confirm your password"
-                    required
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-1 top-1 h-8 w-8 p-0"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  >
-                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </Button>
-                </div>
-              </div>
-
-              <Button type="submit" className="w-full magical-glow" disabled={isLoading}>
-                {isLoading ? (
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                  >
-                    <Sparkles className="w-4 h-4" />
-                  </motion.div>
-                ) : (
-                  'Create Grimoire'
-                )}
-              </Button>
+                </>
+              )}
             </form>
 
             <div className="relative">

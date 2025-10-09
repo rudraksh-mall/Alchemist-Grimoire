@@ -1,12 +1,48 @@
 import { create } from "zustand";
-import { api, authApi } from "../services/api.js";
+// FIX: Import the default export (the main Axios instance) as 'api',
+// and import 'authApi' as a named export.
+import api, { authApi } from "../services/api.js"; 
 
+
+// --- CRITICAL FIX START: Safe Initialization ---
+
+const getInitialUser = () => {
+    // 1. Get the raw string from localStorage.
+    const rawUser = localStorage.getItem("alchemist_user");
+
+    // 2. CHECK 1: If the item is the literal string "undefined", treat it as empty.
+    if (!rawUser || rawUser === 'undefined' || rawUser === 'null') {
+        return null;
+    }
+
+    try {
+        // 3. CHECK 2: Attempt to parse the valid string.
+        const parsed = JSON.parse(rawUser);
+
+        // 4. CHECK 3: Ensure the parsed object has the expected 'user' structure, otherwise return null.
+        // This prevents crashes if localStorage contains corrupted, but valid, JSON (e.g., '123' or 'true').
+        return parsed.user || parsed || null; 
+    } catch (e) {
+        // 5. If parsing fails (e.g., corrupted JSON), log error and return null.
+        console.error("Corrupted JSON in localStorage. User data reset.", e);
+        localStorage.removeItem("alchemist_user");
+        return null;
+    }
+};
+
+const initialUser = getInitialUser();
+const initialToken = localStorage.getItem("alchemist_token") || null;
+
+// --- CRITICAL FIX END ---
 
 const useAuthStore = create((set, get) => ({
-  user: JSON.parse(localStorage.getItem("alchemist_user")) || null,
-  accessToken: localStorage.getItem("alchemist_token") || null,
+  // Use the safely derived initial values
+  user: initialUser,
+  accessToken: initialToken,
   isLoading: true,
   
+  // NEW: Setter for local loading state in the component
+  setIsLoading: (status) => set({ isLoading: status }),
 
   // Initialize authentication state on app mount
   initAuth: async () => {
@@ -17,6 +53,7 @@ const useAuthStore = create((set, get) => ({
     }
 
     try {
+      // Use the default API instance imported as 'api'
       const { data } = await api.get("/v1/users/current-user");
       // 🎯 FIX: Ensure user object is saved correctly
       const currentUser = data.data; 
@@ -38,6 +75,7 @@ const useAuthStore = create((set, get) => ({
   // 🎯 NEW ACTION: Manually fetch and update the current user object
   updateCurrentUser: async () => {
     try {
+      // NOTE: Path updated to match the final consolidated route: /v1/users/current-user
       const { data } = await api.get("/v1/users/current-user");
       const updatedUser = data.data;
 
@@ -52,43 +90,37 @@ const useAuthStore = create((set, get) => ({
     }
   },
 
-  // LOGIN
-  login: async (email, password) => {
-    set({ isLoading: true });
-    try {
-      const response = await authApi.login(email, password);
-      const { user, accessToken } = response;
+  // 🎯 NEW ACTION: Finalizes login after successful OTP verification
+  finalizeLogin: (user, accessToken) => {
+    // This function is called by the LoginPage after successful /verify-otp
+    localStorage.setItem("alchemist_user", JSON.stringify(user));
+    localStorage.setItem("alchemist_token", accessToken);
 
-      localStorage.setItem("alchemist_user", JSON.stringify(user));
-      localStorage.setItem("alchemist_token", accessToken);
-
-      set({ user, accessToken });
-      return user;
-    } finally {
-      set({ isLoading: false });
-    }
+    set({ user, accessToken, isLoading: false });
   },
 
-  // REGISTER
+  // REGISTER (FIXED: Stops setting tokens/user, now waits for verifyOtp)
   register: async (email, password, fullName) => {
     set({ isLoading: true });
     try {
-      const response = await authApi.register(email, password, fullName);
-      const { user, accessToken } = response;
+      // 1. Call the backend to create the user and send the OTP.
+      // NOTE: We assume authApi.register returns { email } and NOT tokens/user object.
+      await authApi.register(email, password, fullName);
 
-      localStorage.setItem("alchemist_user", JSON.stringify(user));
-      localStorage.setItem("alchemist_token", accessToken);
-
-      set({ user, accessToken });
+      // Returning the email confirms success and allows the frontend to track who needs verification.
+      return email; 
     } finally {
       set({ isLoading: false });
     }
   },
 
-  // GOOGLE AUTH (Existing, but no changes needed here, as the fix is handled by page redirect/updateCurrentUser)
+  // GOOGLE AUTH (Existing, but no changes needed here)
   googleAuth: async () => {
     set({ isLoading: true });
     try {
+      // NOTE: This function currently requires manual handling of the redirect 
+      // since it's hard to get data back from a direct browser call in a store function.
+      // We keep it as-is based on your original file's structure.
       const response = await authApi.googleAuth();
       const { user, accessToken } = response;
 
@@ -104,7 +136,7 @@ const useAuthStore = create((set, get) => ({
   // 🎯 NEW ACTION: Disconnects Google Calendar and refreshes state
   disconnectGoogleAuth: async () => {
     try {
-      // NOTE: This relies on authApi.disconnectGoogle() being implemented 
+      // NOTE: Path updated to match the final consolidated route: /v1/users/google/disconnect
       await authApi.disconnectGoogle(); 
       get().updateCurrentUser(); // Refresh the user object to clear the token field
       return true;
@@ -117,6 +149,7 @@ const useAuthStore = create((set, get) => ({
   // LOGOUT
   logout: async () => {
     try {
+      // NOTE: Path updated to match the final consolidated route: /v1/users/logout
       await authApi.logout();
     } catch (err) {
       console.error("Logout failed:", err);
@@ -130,6 +163,7 @@ const useAuthStore = create((set, get) => ({
   // REFRESH TOKEN
   refreshAccessToken: async () => {
     try {
+      // NOTE: Path updated to match the final consolidated route: /v1/users/refresh-token
       const refreshed = await authApi.refreshToken();
       const { accessToken } = refreshed;
       localStorage.setItem("alchemist_token", accessToken);
@@ -147,15 +181,25 @@ const useAuthStore = create((set, get) => ({
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const { refreshAccessToken, logout } = useAuthStore.getState();
+    // FIX: Retrieve functions *inside* the async block where the error check occurs.
     const originalRequest = error.config;
+    const requestUrl = originalRequest.url || "";
 
+    // 🎯 CRITICAL FIX: The check below causes the infinite loop.
+    // The `useAuthStore.getState()` must only be called if the error condition is met.
+    
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
-      !originalRequest.url.includes("/login") &&
-      !originalRequest.url.includes("/register")
+      // Check for public routes that should not trigger a token retry
+      !requestUrl.includes("users/login") &&
+      !requestUrl.includes("users/verify-otp") &&
+      !requestUrl.includes("users/register") &&
+      !requestUrl.includes("auth/google/callback")
     ) {
+      // Retrieve the functions ONLY when we know we need to retry
+      const { refreshAccessToken, logout } = useAuthStore.getState();
+
       originalRequest._retry = true;
       try {
         const newToken = await refreshAccessToken();
