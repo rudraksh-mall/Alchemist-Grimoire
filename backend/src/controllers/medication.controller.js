@@ -1,6 +1,9 @@
 import { User } from "../models/user.model.js";
 import { createInitialDoses } from "../services/doseCreation.service.js";
-import { createCalendarEvent } from "../services/calendar.service.js";
+import {
+  createCalendarEvent,
+  deleteCalendarEvent,
+} from "../services/calendar.service.js";
 import { MedicationSchedule } from "../models/medicationSchedule.model.js";
 import { DoseLog } from "../models/doseLog.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -140,20 +143,52 @@ const updateMedicationSchedule = asyncHandler(async (req, res) => {
 
 // Delete a medication schedule by ID
 const deleteMedicationSchedule = asyncHandler(async (req, res) => {
-  const { scheduleId } = req.params;
-  const schedule = await MedicationSchedule.findOneAndDelete({
+  const { scheduleId } = req.params; // 1. Find the schedule BEFORE deletion to get the Google Event ID
+  const schedule = await MedicationSchedule.findOne({
     _id: scheduleId,
     userId: req.user._id,
-  });
+  }).select("googleEventId"); // Only fetch the ID we need
+
   if (!schedule) {
     throw new ApiError(404, "Medication schedule not found");
   }
-  // Optionally, delete associated dose logs
+
+  // --- 2. GOOGLE CALENDAR SYNC DELETION ---
+  // Check if a Google Event ID exists on the schedule
+  if (schedule.googleEventId) {
+    // Fetch the user's refresh token needed for the deletion service
+    const user = await User.findById(req.user._id).select("googleRefreshToken");
+
+    if (user && user.googleRefreshToken) {
+      try {
+        // Call the new service to delete the event
+        await deleteCalendarEvent(
+          schedule.googleEventId,
+          user.googleRefreshToken
+        );
+      } catch (syncError) {
+        // Log the error but DO NOT crash the server (non-critical feature failure)
+        console.error(
+          "[Google Sync ERROR] Failed to execute calendar deletion:",
+          syncError.message
+        );
+      }
+    }
+  } // 3. Delete from MongoDB
+  // We use findOneAndDelete outside of the initial query since we already did a findOne to get the eventId
+  // ----------------------------------------
+
+  await MedicationSchedule.deleteOne({ _id: scheduleId, userId: req.user._id }); // 4. Delete associated dose logs
+
   await DoseLog.deleteMany({ scheduleId: scheduleId });
   return res
     .status(200)
     .json(
-      new ApiResponse(200, null, "Medication schedule deleted successfully")
+      new ApiResponse(
+        200,
+        null,
+        "Medication schedule and associated Google event deleted successfully"
+      )
     );
 });
 

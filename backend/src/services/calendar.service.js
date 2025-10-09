@@ -24,18 +24,18 @@ export const createCalendarEvent = async (schedule, refreshToken) => {
   };
 
   let recurrenceRule = `RRULE:FREQ=${frequencyMap[schedule.frequency] || "DAILY"}`;
-  
+
   // 🎯 FIX: Add UNTIL clause if endDate exists
   if (schedule.endDate) {
     const endDateObj = new Date(schedule.endDate);
-    
-    // Google RRULE UNTIL format is YYYYMMDDTHHMMSSZ. 
+
+    // Google RRULE UNTIL format is YYYYMMDDTHHMMSSZ.
     // We set the time to the end of the day (23:59:59 UTC) to ensure the last day is included.
-    endDateObj.setUTCHours(23, 59, 59, 0); 
-    
+    endDateObj.setUTCHours(23, 59, 59, 0);
+
     // Format to YYYYMMDDTHHMMSSZ
-    const untilDate = endDateObj.toISOString().replace(/[-:]|\.\d{3}/g, '');
-    
+    const untilDate = endDateObj.toISOString().replace(/[-:]|\.\d{3}/g, "");
+
     // Append the UNTIL clause to the RRULE
     recurrenceRule += `;UNTIL=${untilDate}`;
   }
@@ -48,18 +48,18 @@ export const createCalendarEvent = async (schedule, refreshToken) => {
 
   // We assume schedule.userId is populated or accessible here, and has a timezone property.
   // This value should be the user's timezone string (e.g., 'America/New_York').
-  const userTimezone = schedule.userId?.timezone || "UTC"; 
+  const userTimezone = schedule.userId?.timezone || "UTC";
 
   const event = {
     summary: `💊 ${schedule.name} (${schedule.dosage})`,
     description: `Time to take your scheduled dose. Sync managed by Alchemist's Grimoire.`,
     start: {
       dateTime: `${startDateISO}T${startTime}:00`,
-      timeZone: userTimezone, 
+      timeZone: userTimezone,
     },
     end: {
       // Event lasts 5 minutes for simplicity
-      dateTime: `${startDateISO}T${startTime.split(':')[0]}:${parseInt(startTime.split(':')[1]) + 5}:00`,
+      dateTime: `${startDateISO}T${startTime.split(":")[0]}:${parseInt(startTime.split(":")[1]) + 5}:00`,
       timeZone: userTimezone,
     },
     recurrence: [recurrenceRule], // Contains the UNTIL clause if applicable
@@ -76,3 +76,50 @@ export const createCalendarEvent = async (schedule, refreshToken) => {
   // Return the Google Event ID for potential later deletion/updates
   return response.data.id;
 };
+
+// ... existing createCalendarEvent function ...
+
+// 🌟 NEW FUNCTION: Deletes a Google Calendar event 🌟
+/**
+ * Deletes a calendar event using the stored Event ID and the user's Refresh Token.
+ * @param {string} googleEventId - The ID of the event in Google Calendar.
+ * @param {string} refreshToken - The user's stored Google Refresh Token.
+ * @param {string} [calendarId='primary'] - The ID of the calendar (defaults to primary).
+ */
+export const deleteCalendarEvent = async (
+  googleEventId,
+  refreshToken,
+  calendarId = "primary"
+) => {
+  // 1. Set the credentials for the specific user
+  oauth2Client.setCredentials({ refresh_token: refreshToken });
+
+  try {
+    await calendar.events.delete({
+      calendarId: calendarId,
+      eventId: googleEventId,
+      sendNotifications: true, // Optional: Sends cancellation notice
+    });
+    console.log(
+      `[Google Sync] Event ID ${googleEventId} successfully deleted.`
+    );
+    return true;
+  } catch (error) {
+    // Log the error but DO NOT crash the server (non-critical feature failure)
+    // Note: Google returns 404 if the event was already deleted or not found.
+    if (error.code === 404) {
+      console.warn(
+        `[Google Sync WARNING] Event ID ${googleEventId} not found in Google Calendar. Skipping deletion.`
+      );
+      return true;
+    }
+    console.error(
+      `[Google Sync ERROR] Failed to delete calendar event ${googleEventId}:`,
+      error.message
+    );
+    return false;
+  }
+};
+
+// Update the exports list at the end of the file:
+// export { createCalendarEvent, deleteCalendarEvent };
