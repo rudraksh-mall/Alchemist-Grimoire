@@ -1,4 +1,3 @@
-// src/store/useAuthStore.js
 import { create } from "zustand";
 import { api, authApi } from "../services/api.js";
 
@@ -19,8 +18,12 @@ const useAuthStore = create((set, get) => ({
 
     try {
       const { data } = await api.get("/v1/users/current-user");
+      // 🎯 FIX: Ensure user object is saved correctly
+      const currentUser = data.data; 
+      localStorage.setItem("alchemist_user", JSON.stringify(currentUser)); 
+      
       set({
-        user: data.data,
+        user: currentUser,
         accessToken: savedToken,
         isLoading: false,
       });
@@ -29,6 +32,23 @@ const useAuthStore = create((set, get) => ({
       get().logout();
     } finally {
       set({ isLoading: false });
+    }
+  },
+
+  // 🎯 NEW ACTION: Manually fetch and update the current user object
+  updateCurrentUser: async () => {
+    try {
+      const { data } = await api.get("/v1/users/current-user");
+      const updatedUser = data.data;
+
+      // Update local storage and state
+      localStorage.setItem("alchemist_user", JSON.stringify(updatedUser));
+      set({ user: updatedUser });
+      return updatedUser;
+    } catch (error) {
+      console.error("Failed to update current user state:", error);
+      // Optional: if failed, log out user
+      // get().logout(); 
     }
   },
 
@@ -65,7 +85,7 @@ const useAuthStore = create((set, get) => ({
     }
   },
 
-  // GOOGLE AUTH
+  // GOOGLE AUTH (Existing, but no changes needed here, as the fix is handled by page redirect/updateCurrentUser)
   googleAuth: async () => {
     set({ isLoading: true });
     try {
@@ -78,6 +98,19 @@ const useAuthStore = create((set, get) => ({
       set({ user, accessToken });
     } finally {
       set({ isLoading: false });
+    }
+  },
+
+  // 🎯 NEW ACTION: Disconnects Google Calendar and refreshes state
+  disconnectGoogleAuth: async () => {
+    try {
+      // NOTE: This relies on authApi.disconnectGoogle() being implemented 
+      await authApi.disconnectGoogle(); 
+      get().updateCurrentUser(); // Refresh the user object to clear the token field
+      return true;
+    } catch (err) {
+      console.error("Google disconnect failed:", err);
+      throw err;
     }
   },
 

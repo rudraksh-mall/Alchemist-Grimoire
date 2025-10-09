@@ -6,6 +6,11 @@ import { oauth2Client, SCOPES } from "../utils/googleAuth.js";
 import { StatusCodes } from "http-status-codes";
 import jwt from "jsonwebtoken";
 
+// Function to safely return a user object without sensitive fields
+const getSafeUser = async (userId) => {
+    return await User.findById(userId).select("-password -refreshToken");
+}
+
 // REVISED: generateAccessAndRefreshTokens (backend/src/controllers/auth.controller.js)
 
 const generateAccessAndRefreshTokens = async (userId) => {
@@ -15,9 +20,7 @@ const generateAccessAndRefreshTokens = async (userId) => {
     console.log("User fetched (for token gen):", user ? "Found" : "Not Found"); // Debug log
 
     if (!user) {
-      // 🎯 FIX: Do NOT throw a 500 error here.
-      // If the user is not found, return null and let the calling function (refreshAccessToken)
-      // handle the 401 Unauthorized security issue gracefully.
+      // If the user is not found, return null and let the calling function handle the 401.
       return { accessToken: null, refreshToken: null };
     }
 
@@ -31,7 +34,7 @@ const generateAccessAndRefreshTokens = async (userId) => {
 
     return { accessToken, refreshToken };
   } catch (error) {
-    console.error("Error in generateAccessAndRefreshTokens:", error); // Throwing a generic 500 here is acceptable if the database save fails.
+    console.error("Error in generateAccessAndRefreshTokens:", error);
     throw new ApiError(
       500,
       "Something went wrong during token generation (DB update failed)."
@@ -58,9 +61,7 @@ const registerUser = asyncHandler(async (req, res) => {
     timezone: timezone || "UTC",
   });
 
-  const createdUser = await User.findById(user._id).select(
-    "-password -refreshToken"
-  );
+  const createdUser = await getSafeUser(user._id);
 
   const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
     user._id
@@ -95,9 +96,7 @@ const loginUser = asyncHandler(async (req, res) => {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
   };
-  const userSafe = await User.findById(user._id).select(
-    "-password -refreshToken"
-  );
+  const userSafe = await getSafeUser(user._id);
 
   return res
     .cookie("refreshToken", refreshToken, options)
@@ -128,9 +127,7 @@ const logoutUser = asyncHandler(async (req, res) => {
 // GET CURRENT USER
 
 const getCurrentUser = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id).select(
-    "-password -refreshToken"
-  );
+  const user = await getSafeUser(req.user._id);
   return res
     .status(200)
     .json(new ApiResponse(200, user, "Current user fetched"));
@@ -179,11 +176,14 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
   const { fullName, email, timezone } = req.body;
   if (!fullName || !email) throw new ApiError(400, "All fields are required");
 
-  const updatedUser = await User.findByIdAndUpdate(
+  // Perform update
+  await User.findByIdAndUpdate(
     req.user._id,
-    { fullName, email, timezone },
-    { new: true }
-  ).select("-password -refreshToken");
+    { fullName, email, timezone }
+  );
+  
+  // Return updated safe user object
+  const updatedUser = await getSafeUser(req.user._id);
 
   return res
     .status(200)
@@ -209,6 +209,8 @@ const googleAuthLogin = (req, res) => {
     scope: SCOPES,
     include_granted_scopes: true,
     state: userId, // The state parameter securely carries the ID to the callback
+    // 🎯 CRITICAL FIX: Ensure prompt is included to force re-consent and issue a refresh token
+    prompt: "consent",
   });
 
   res.redirect(authUrl);
@@ -224,6 +226,7 @@ const googleAuthCallback = asyncHandler(async (req, res) => {
   const FRONTEND_SETTINGS_URL = process.env.CORS_ORIGIN + "/settings";
 
   if (!code || !userId) {
+    // 🎯 FIX: Use the correct error parameter name
     return res.redirect(FRONTEND_SETTINGS_URL + "?error=auth_failed");
   }
 
@@ -249,14 +252,35 @@ const googleAuthCallback = asyncHandler(async (req, res) => {
       { new: true }
     );
 
-    // Success! Redirect the user back to the settings page
-    res.redirect(FRONTEND_SETTINGS_URL + "?success=calendar_connected");
+    // 🎯 FIX: Use the correct success parameter name expected by the frontend (calendar_sync=success)
+    res.redirect(FRONTEND_SETTINGS_URL + "?calendar_sync=success");
   } catch (error) {
     console.error("Error exchanging Google token:", error);
     // Redirect to settings with a generic error message
     res.redirect(FRONTEND_SETTINGS_URL + "?error=failed_connection");
   }
 });
+
+// 🎯 NEW FUNCTION: Disconnect Google Calendar
+// Mapped to: DELETE /api/v1/users/google/disconnect
+const disconnectGoogle = asyncHandler(async (req, res) => {
+    // 1. Clear the token field using $unset
+    await User.findByIdAndUpdate(
+        req.user._id, 
+        { $unset: { googleRefreshToken: 1 } }
+    );
+    
+    // 2. Retrieve the newly updated safe user object
+    const updatedUser = await getSafeUser(req.user._id);
+
+    if (!updatedUser) {
+        throw new ApiError(404, "User not found after disconnect");
+    }
+
+    // 3. Send back the updated user object (with googleRefreshToken now missing)
+    return res.status(200).json(new ApiResponse(200, updatedUser, "Google Calendar disconnected"));
+});
+
 
 export {
   registerUser,
@@ -267,4 +291,5 @@ export {
   updateAccountDetails,
   googleAuthCallback,
   googleAuthLogin,
+  disconnectGoogle, // Export the new function
 };
