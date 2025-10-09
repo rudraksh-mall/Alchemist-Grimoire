@@ -25,6 +25,22 @@ const userSchema = new Schema(
       required: [true, "Password is required"],
     },
 
+    // --- NEW FIELDS FOR OTP VERIFICATION ---
+    emailVerificationToken: {
+      type: String, // Stores the hashed OTP
+      default: null,
+    },
+    emailVerificationExpires: {
+      type: Date, // Stores the time the OTP expires
+      default: null,
+    },
+    // Optional: Flag to remember the user is verified (can be useful for registration flow)
+    isVerified: { 
+      type: Boolean,
+      default: false,
+    },
+    // ----------------------------------------
+
     timezone: {
       type: String,
       default: "UTC",
