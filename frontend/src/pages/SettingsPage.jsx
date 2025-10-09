@@ -12,9 +12,9 @@ import {
   Sun,
   Save,
   Trash2,
-  Check, 
-  Link as LinkIcon, 
-  Loader2
+  Check,
+  Link as LinkIcon,
+  Loader2,
 } from "lucide-react";
 import useAuthStore from "../hooks/useAuthStore.js";
 import { Sidebar } from "../components/Sidebar.jsx";
@@ -42,15 +42,14 @@ import { toast } from "sonner";
 
 // --- ACTION REQUIRED: VAPID Public Key ---
 // This key must match the one in your backend's .env file.
-const VAPID_PUBLIC_KEY = "BLLw3ROQRrtJUMgLx2CUWjG3UQ5lH0epP_J491eOFAKGFJqPjDfbGSL6sLJKks3sMTtBVWkIJXNwvC26mR1zmek"; 
+const VAPID_PUBLIC_KEY =
+  "BLLw3ROQRrtJUMgLx2CUWjG3UQ5lH0epP_J491eOFAKGFJqPjDfbGSL6sLJKks3sMTtBVWkIJXNwvC26mR1zmek";
 // ------------------------------------------
 
 // Helper function to convert the VAPID key base64 string to a Uint8Array
 const urlBase64ToUint8Array = (base64String) => {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding)
-    .replace(/-/g, '+')
-    .replace(/_/g, '/');
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
 
   const rawData = window.atob(base64);
   const outputArray = new Uint8Array(rawData.length);
@@ -61,215 +60,224 @@ const urlBase64ToUint8Array = (base64String) => {
   return outputArray;
 };
 
-
 // Helper function to safely initialize state only once
 const getInitialSettings = (user) => ({
-    name: user?.fullName || "", 
-    email: user?.email || "",
-    timezone: user?.timezone || "America/New_York",
-    browserNotifications: user?.notificationPreferences?.browser ?? false, // Secure default
-    emailNotifications: user?.notificationPreferences?.email ?? false,
-    smsNotifications: false,
-    reminderBefore: "15",
-    appleHealth: false,
-    dataSharing: false,
-    analytics: true,
+  name: user?.fullName || "",
+  email: user?.email || "",
+  timezone: user?.timezone || "America/New_York",
+  browserNotifications: user?.notificationPreferences?.browser ?? false, // Secure default
+  emailNotifications: user?.notificationPreferences?.email ?? false,
+  smsNotifications: false,
+  reminderBefore: "15",
+  appleHealth: false,
+  dataSharing: false,
+  analytics: true,
 });
 
 export function SettingsPage() {
   // --- CRITICAL FIX START: Use separate, stable selectors ---
-  const user = useAuthStore(state => state.user);
-  const storeLoading = useAuthStore(state => state.isLoading);
-  
+  const user = useAuthStore((state) => state.user);
+  const storeLoading = useAuthStore((state) => state.isLoading);
+
   // Action functions (stable references)
-  const logout = useAuthStore(state => state.logout);
-  const updateCurrentUser = useAuthStore(state => state.updateCurrentUser);
-  const disconnectGoogleAuth = useAuthStore(state => state.disconnectGoogleAuth);
-  const deleteAccountAction = useAuthStore(state => state.deleteAccountAction);
-  const saveNotificationPreferences = useAuthStore(state => state.saveNotificationPreferences); 
-  const saveBrowserSubscription = useAuthStore(state => state.saveBrowserSubscription); 
+  const logout = useAuthStore((state) => state.logout);
+  const updateCurrentUser = useAuthStore((state) => state.updateCurrentUser);
+  const disconnectGoogleAuth = useAuthStore(
+    (state) => state.disconnectGoogleAuth
+  );
+  const deleteAccountAction = useAuthStore(
+    (state) => state.deleteAccountAction
+  );
+  const saveNotificationPreferences = useAuthStore(
+    (state) => state.saveNotificationPreferences
+  );
+  const saveBrowserSubscription = useAuthStore(
+    (state) => state.saveBrowserSubscription
+  );
   // --- CRITICAL FIX END ---
-  
+
   const { theme, setTheme } = useTheme();
-  
+
   const [localLoading, setLocalLoading] = useState(false);
   const isLoading = storeLoading || localLoading;
 
   const navigate = useNavigate();
 
   // Derived Values (Accessed directly from user)
-  const isGoogleConnected = !!(user?.googleRefreshToken);
+  const isGoogleConnected = !!user?.googleRefreshToken;
   const currentBrowserPref = user?.notificationPreferences?.browser ?? false;
   const currentEmailPref = user?.notificationPreferences?.email ?? false;
-  
-  const [reminderBefore, setReminderBefore] = useState("15"); 
-  const [appleHealth, setAppleHealth] = useState(false); 
 
+  const [reminderBefore, setReminderBefore] = useState("15");
+  const [appleHealth, setAppleHealth] = useState(false);
 
   // Initialize state using the function form, which is safer.
   const [settings, setSettings] = useState(() => getInitialSettings(user));
 
-
   // --- FIX 1: Update settings only when the central user object changes ---
   useEffect(() => {
     if (user) {
-        // This ensures the local settings (name, email, etc.) are synchronized with the global user state
-        setSettings(prev => ({
-            ...prev,
-            name: user.fullName || prev.name,
-            email: user.email || prev.email,
-            timezone: user.timezone || prev.timezone,
-            browserNotifications: user.notificationPreferences?.browser || prev.browserNotifications,
-            emailNotifications: user.notificationPreferences?.email || prev.emailNotifications,
-            googleCalendar: !!user.googleRefreshToken, // Update derived state from user object
-        }));
+      // This ensures the local settings (name, email, etc.) are synchronized with the global user state
+      setSettings((prev) => ({
+        ...prev,
+        name: user.fullName || prev.name,
+        email: user.email || prev.email,
+        timezone: user.timezone || prev.timezone,
+        browserNotifications:
+          user.notificationPreferences?.browser || prev.browserNotifications,
+        emailNotifications:
+          user.notificationPreferences?.email || prev.emailNotifications,
+        googleCalendar: !!user.googleRefreshToken, // Update derived state from user object
+      }));
     }
-  }, [user]); 
+  }, [user]);
 
   // --- FIX 2: Handle URL OAuth success/error flag and initial navigation ---
   useEffect(() => {
     if (!user) {
-        navigate("/login");
-        return;
+      navigate("/login");
+      return;
     }
 
     const params = new URLSearchParams(window.location.search);
-    const calendarSyncSuccess = params.get('calendar_sync');
-    const calendarSyncError = params.get('error');
+    const calendarSyncSuccess = params.get("calendar_sync");
+    const calendarSyncError = params.get("error");
 
     if (calendarSyncSuccess || calendarSyncError) {
-      if (calendarSyncSuccess === 'success') {
-          toast.success("Calendar connected successfully! Syncing potions.");
-          updateCurrentUser(); 
+      if (calendarSyncSuccess === "success") {
+        toast.success("Calendar connected successfully! Syncing potions.");
+        updateCurrentUser();
       } else if (calendarSyncError) {
-          let errorMessage = "Synchronization failed. Please try again.";
-          if (calendarSyncError === 'no_refresh_token') {
-              errorMessage = "Connection failed: Google did not grant permanent access. Please ensure you grant full access when prompted.";
-          } else if (calendarSyncError === 'access_denied') {
-              errorMessage = "Connection denied by user.";
-          }
-          toast.error(errorMessage);
+        let errorMessage = "Synchronization failed. Please try again.";
+        if (calendarSyncError === "no_refresh_token") {
+          errorMessage =
+            "Connection failed: Google did not grant permanent access. Please ensure you grant full access when prompted.";
+        } else if (calendarSyncError === "access_denied") {
+          errorMessage = "Connection denied by user.";
+        }
+        toast.error(errorMessage);
       }
-          
-      navigate('/settings', { replace: true }); 
+
+      navigate("/settings", { replace: true });
     }
-  }, [user, navigate, updateCurrentUser]); 
-  
+  }, [user, navigate, updateCurrentUser]);
 
   const handleSettingChange = (key, value) => {
     // This is now only used for unhandled fields like SMS or time selections
-    if (key === 'reminderBefore') {
-        setReminderBefore(value);
-    } else if (key === 'appleHealth') {
-        setAppleHealth(value);
-    } else if (key === 'name' || key === 'email' || key === 'timezone') {
-        // Handle local profile field changes (will be saved in handleSaveSettings)
-        setSettings(prev => ({ ...prev, [key]: value }));
+    if (key === "reminderBefore") {
+      setReminderBefore(value);
+    } else if (key === "appleHealth") {
+      setAppleHealth(value);
+    } else if (key === "name" || key === "email" || key === "timezone") {
+      // Handle local profile field changes (will be saved in handleSaveSettings)
+      setSettings((prev) => ({ ...prev, [key]: value }));
     }
   };
-  
+
   // === PUSH NOTIFICATION LOGIC ===
 
   const subscribeUser = async (registration) => {
-      // 🎯 CHECK: This is now a runtime check against the key value
-      if (!VAPID_PUBLIC_KEY || VAPID_PUBLIC_KEY.length < 50) {
-          console.error("VAPID Public Key is missing or too short. Cannot subscribe.");
-          toast.error("VAPID key error. Check key in settings file.");
-          return false;
-      }
-      
-      try {
-        const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
-        
-        // Subscribe the service worker to the push service
-        const subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: applicationServerKey,
-        });
+    // 🎯 CHECK: This is now a runtime check against the key value
+    if (!VAPID_PUBLIC_KEY || VAPID_PUBLIC_KEY.length < 50) {
+      console.error(
+        "VAPID Public Key is missing or too short. Cannot subscribe."
+      );
+      toast.error("VAPID key error. Check key in settings file.");
+      return false;
+    }
 
-        // Send the subscription object to the backend for storage
-        await saveBrowserSubscription(subscription);
-        
-        toast.success("Browser notifications enabled!");
-        return true;
-      } catch (error) {
-        // Log the exact error for debugging
-        console.error("Push subscription failed:", error); 
-        toast.error("Subscription failed. Check console for VAPID key validity.");
-        return false;
-      }
+    try {
+      const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+
+      // Subscribe the service worker to the push service
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: applicationServerKey,
+      });
+
+      // Send the subscription object to the backend for storage
+      await saveBrowserSubscription(subscription);
+
+      toast.success("Browser notifications enabled!");
+      return true;
+    } catch (error) {
+      // Log the exact error for debugging
+      console.error("Push subscription failed:", error);
+      toast.error("Subscription failed. Check console for VAPID key validity.");
+      return false;
+    }
   };
 
   const unsubscribeUser = async (registration) => {
     try {
-        const subscription = await registration.pushManager.getSubscription();
-        if (subscription) {
-            // Unsubscribe from the browser's push service
-            await subscription.unsubscribe();
-        }
-        
-        // Send a null subscription to the backend to clear the record
-        await saveBrowserSubscription(null); 
-        toast.info("Browser notifications disabled.");
-        return true;
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        // Unsubscribe from the browser's push service
+        await subscription.unsubscribe();
+      }
+
+      // Send a null subscription to the backend to clear the record
+      await saveBrowserSubscription(null);
+      toast.info("Browser notifications disabled.");
+      return true;
     } catch (error) {
-        console.error("Push unsubscription failed:", error);
-        toast.error("Unsubscription failed.");
-        return false;
+      console.error("Push unsubscription failed:", error);
+      toast.error("Unsubscription failed.");
+      return false;
     }
   };
-
 
   const handleBrowserNotificationToggle = async (value) => {
     setLocalLoading(true);
 
-    if (!('serviceWorker' in navigator && 'PushManager' in window)) {
-        toast.error("Your browser does not support push notifications.");
-        setLocalLoading(false);
-        return false;
+    if (!("serviceWorker" in navigator && "PushManager" in window)) {
+      toast.error("Your browser does not support push notifications.");
+      setLocalLoading(false);
+      return false;
     }
 
     let success = false;
 
     if (value) {
-        // --- Subscription Logic (Turning ON) ---
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') {
-            toast.warning("Notification permission denied by user.");
-            success = false;
-        } else {
-            // Register service worker if not already registered
-            const registration = await navigator.serviceWorker.getRegistration('/') || 
-                                 await navigator.serviceWorker.register('/service-worker.js');
-            
-            // CRITICAL FIX: Force unsubscribe old key before subscribing new one to avoid 410 errors
-            const currentSubscription = await registration.pushManager.getSubscription();
-            if (currentSubscription) {
-                await currentSubscription.unsubscribe(); 
-            }
+      // --- Subscription Logic (Turning ON) ---
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        toast.warning("Notification permission denied by user.");
+        success = false;
+      } else {
+        // Register service worker if not already registered
+        const registration =
+          (await navigator.serviceWorker.getRegistration("/")) ||
+          (await navigator.serviceWorker.register("/service-worker.js"));
 
-            success = await subscribeUser(registration);
+        // CRITICAL FIX: Force unsubscribe old key before subscribing new one to avoid 410 errors
+        const currentSubscription =
+          await registration.pushManager.getSubscription();
+        if (currentSubscription) {
+          await currentSubscription.unsubscribe();
         }
-        
-        // If subscription succeeds, update DB preference flag
-        await saveNotificationPreferences(success, currentEmailPref); 
-        
+
+        success = await subscribeUser(registration);
+      }
+
+      // If subscription succeeds, update DB preference flag
+      await saveNotificationPreferences(success, currentEmailPref);
     } else {
-        // --- Unsubscription Logic (Turning OFF) ---
-        const registration = await navigator.serviceWorker.getRegistration('/');
-        if (registration) {
-             success = await unsubscribeUser(registration);
-        } else {
-             // If no registration exists, treat as successful local cleanup
-             success = true;
-        }
-        // Always update preference flag to false if we attempted to turn it off
-        await saveNotificationPreferences(false, currentEmailPref);
+      // --- Unsubscription Logic (Turning OFF) ---
+      const registration = await navigator.serviceWorker.getRegistration("/");
+      if (registration) {
+        success = await unsubscribeUser(registration);
+      } else {
+        // If no registration exists, treat as successful local cleanup
+        success = true;
+      }
+      // Always update preference flag to false if we attempted to turn it off
+      await saveNotificationPreferences(false, currentEmailPref);
     }
-    
+
     // If operation failed, we must revert the UI state
     if (!success) {
-         setSettings(prev => ({ ...prev, browserNotifications: !value }));
+      setSettings((prev) => ({ ...prev, browserNotifications: !value }));
     }
 
     setLocalLoading(false);
@@ -277,29 +285,26 @@ export function SettingsPage() {
   };
   // ===================================
 
-
   const handleUpdateNotifications = async (key, value) => {
     // Note: Local loading is handled inside handleBrowserNotificationToggle for accuracy
-    if (key === 'browserNotifications') {
-        await handleBrowserNotificationToggle(value);
-
-    } else if (key === 'emailNotifications') {
-        setLocalLoading(true);
-        try {
-             // Pass the new email value and the current browser preference
-             await saveNotificationPreferences(currentBrowserPref, value); 
-             toast.success("Email preference updated.");
-        } catch (error) {
-            toast.error("Failed to update email preference.");
-             // Revert the toggle on failure
-            setSettings(prev => ({ ...prev, emailNotifications: !value }));
-        } finally {
-             setLocalLoading(false);
-        }
+    if (key === "browserNotifications") {
+      await handleBrowserNotificationToggle(value);
+    } else if (key === "emailNotifications") {
+      setLocalLoading(true);
+      try {
+        // Pass the new email value and the current browser preference
+        await saveNotificationPreferences(currentBrowserPref, value);
+        toast.success("Email preference updated.");
+      } catch (error) {
+        toast.error("Failed to update email preference.");
+        // Revert the toggle on failure
+        setSettings((prev) => ({ ...prev, emailNotifications: !value }));
+      } finally {
+        setLocalLoading(false);
+      }
     }
   };
   // =======================================================================
-
 
   const handleConnectGoogle = () => {
     const userId = user?._id;
@@ -308,28 +313,29 @@ export function SettingsPage() {
       toast.error("Please log in again to connect your calendar.");
       return;
     }
-    
+
     // Redirect to backend endpoint for OAuth login flow
     window.location.href = `http://localhost:8000/api/v1/users/google/login?userId=${userId}`;
   };
 
   // 🎯 FINAL IMPLEMENTATION: Handle disconnection
   const handleDisconnectGoogle = async () => {
-    if (!window.confirm("Are you sure you want to disconnect Google Calendar?")) {
-        return;
+    if (
+      !window.confirm("Are you sure you want to disconnect Google Calendar?")
+    ) {
+      return;
     }
 
     setLocalLoading(true);
     try {
-        await disconnectGoogleAuth(); 
-        toast.success("Google Calendar disconnected successfully.");
+      await disconnectGoogleAuth();
+      toast.success("Google Calendar disconnected successfully.");
     } catch (error) {
-        toast.error("Failed to disconnect calendar.");
+      toast.error("Failed to disconnect calendar.");
     } finally {
-        setLocalLoading(false);
+      setLocalLoading(false);
     }
-  }
-
+  };
 
   const handleSaveSettings = async () => {
     setLocalLoading(true);
@@ -347,38 +353,26 @@ export function SettingsPage() {
   // 🎯 DELETE ACCOUNT FUNCTIONALITY
   const handleDeleteAccount = async () => {
     const isConfirmed = window.confirm(
-        "Are you absolutely sure you want to delete your account? All schedules and logs will be permanently removed."
+      "Are you absolutely sure you want to delete your account? All schedules and logs will be permanently removed."
     );
-    
+
     if (!isConfirmed) {
       return;
     }
-    
+
     setLocalLoading(true);
     try {
-        await deleteAccountAction();
-        toast.success("Account deleted. Farewell, mystical alchemist.");
+      await deleteAccountAction();
+      toast.success("Account deleted. Farewell, mystical alchemist.");
     } catch (error) {
-        if (error.response?.status !== 404) {
-            toast.error("Failed to delete account. Logging out.");
-        }
-        logout(); // Ensure logout occurs on client side
+      if (error.response?.status !== 404) {
+        toast.error("Failed to delete account. Logging out.");
+      }
+      logout(); // Ensure logout occurs on client side
     } finally {
-        setLocalLoading(false);
+      setLocalLoading(false);
     }
   };
-
-  const timezones = [
-    "America/New_York",
-    "America/Chicago",
-    "America/Denver",
-    "America/Los_Angeles",
-    "Europe/London",
-    "Europe/Paris",
-    "Asia/Tokyo",
-    "Asia/Shanghai",
-    "Australia/Sydney",
-  ];
 
   const reminderOptions = [
     { value: "5", label: "5 minutes" },
@@ -435,7 +429,7 @@ export function SettingsPage() {
                       <Input
                         id="name"
                         // Display value comes directly from local state
-                        value={user?.fullName || ''} // Read from user object
+                        value={user?.fullName || ""} // Read from user object
                         onChange={(e) =>
                           handleSettingChange("name", e.target.value)
                         }
@@ -448,39 +442,13 @@ export function SettingsPage() {
                         id="email"
                         type="email"
                         // Display value comes directly from local state
-                        value={user?.email || ''} // Read from user object
+                        value={user?.email || ""} // Read from user object
                         onChange={(e) =>
                           handleSettingChange("email", e.target.value)
                         }
                         placeholder="your@email.com"
                       />
                     </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="timezone">
-                      <div className="flex items-center space-x-2">
-                        <Clock className="w-4 h-4" />
-                        <span>Timezone</span>
-                      </div>
-                    </Label>
-                    <Select
-                      value={user?.timezone || 'America/New_York'} // Read from user object
-                      onValueChange={(value) =>
-                        handleSettingChange("timezone", value)
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {timezones.map((tz) => (
-                          <SelectItem key={tz} value={tz}>
-                            {tz.replace("_", " ")}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                   </div>
                 </CardContent>
               </Card>
@@ -513,9 +481,13 @@ export function SettingsPage() {
                       <Switch
                         id="browser-notifications"
                         // Display value comes from user object
-                        checked={currentBrowserPref} 
-                        onCheckedChange={(value) =>
-                          handleUpdateNotifications("browserNotifications", value) // <-- CALLS NEW HANDLER
+                        checked={currentBrowserPref}
+                        onCheckedChange={
+                          (value) =>
+                            handleUpdateNotifications(
+                              "browserNotifications",
+                              value
+                            ) // <-- CALLS NEW HANDLER
                         }
                         disabled={isLoading}
                       />
@@ -534,8 +506,12 @@ export function SettingsPage() {
                         id="email-notifications"
                         // Display value comes from user object
                         checked={currentEmailPref}
-                        onCheckedChange={(value) =>
-                          handleUpdateNotifications("emailNotifications", value) // <-- CALLS NEW HANDLER
+                        onCheckedChange={
+                          (value) =>
+                            handleUpdateNotifications(
+                              "emailNotifications",
+                              value
+                            ) // <-- CALLS NEW HANDLER
                         }
                         disabled={isLoading}
                       />
@@ -614,9 +590,9 @@ export function SettingsPage() {
                     {/* 🎯 Use the derived stable value directly in JSX */}
                     {isGoogleConnected ? (
                       <div className="flex space-x-2">
-                        <Button 
-                          variant="success" 
-                          disabled 
+                        <Button
+                          variant="success"
+                          disabled
                           className="bg-green-500 hover:bg-green-600 text-white"
                         >
                           <Check className="w-4 h-4 mr-2" /> Connected
@@ -641,25 +617,6 @@ export function SettingsPage() {
                         Connect Calendar
                       </Button>
                     )}
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label htmlFor="apple-health">
-                        Apple Health Integration
-                      </Label>
-                      <p className="text-sm text-muted-foreground">
-                        Share data with Apple Health app
-                      </p>
-                    </div>
-                    <Switch
-                      id="apple-health"
-                      checked={appleHealth}
-                      onCheckedChange={(value) =>
-                        handleSettingChange("appleHealth", value)
-                      }
-                      disabled={isLoading}
-                    />
                   </div>
                 </CardContent>
               </Card>
