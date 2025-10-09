@@ -7,6 +7,9 @@ import {
   refreshAccessToken,
   getCurrentUser,
   updateAccountDetails,
+  // --- NEW IMPORT FOR NOTIFICATION UPDATE ---
+  updateNotificationPreferences, // <--- NEW IMPORT
+  // ------------------------------------------
   googleAuthLogin,
   googleAuthCallback,
   disconnectGoogle,
@@ -14,7 +17,7 @@ import {
   sendOtp,
   verifyOtpAndLogin, 
   // --- DELETE ACCOUNT IMPORT ---
-  deleteAccount, // <--- NEW IMPORT
+  deleteAccount, 
   // -----------------------------
 } from "../controllers/auth.controller.js";
 
@@ -42,10 +45,13 @@ router.use(verifyJWT); // <--- MIDDLEWARE STARTS HERE!
 router.route("/logout").post(logoutUser);
 router.route("/current-user").get(getCurrentUser);
 router.route("/update-details").patch(updateAccountDetails);
+
+// === NEW SECURED ROUTE: UPDATE NOTIFICATIONS ===
+router.route("/notifications").patch(updateNotificationPreferences); // <-- NEW ROUTE
+
 router.route("/google/disconnect").delete(disconnectGoogle);
 
 // === NEW SECURED ROUTE: DELETE ACCOUNT ===
-// This requires a valid JWT and performs cascading deletion.
 router.route("/delete-account").delete(deleteAccount); 
 // =========================================
 

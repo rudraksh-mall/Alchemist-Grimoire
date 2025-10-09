@@ -3,8 +3,8 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/user.model.js";
 // --- NEW IMPORT FOR CASCADING DELETION ---
-import { DoseLog } from "../models/doseLog.model.js"; // ASSUMED path
-import { MedicationSchedule } from "../models/medicationSchedule.model.js"; // ASSUMED path
+import { DoseLog } from "../models/doseLog.model.js"; 
+import { MedicationSchedule } from "../models/medicationSchedule.model.js"; 
 // ------------------------------------------
 import { oauth2Client, SCOPES } from "../utils/googleAuth.js";
 import { StatusCodes } from "http-status-codes";
@@ -23,15 +23,14 @@ const getCookieOptions = () => {
     return {
       httpOnly: true,
       secure: true,
-      sameSite: "none", // Must be "none" for cross-origin access
-      // You should also set 'expires' or 'maxAge' here for long-lived tokens
+      sameSite: "none", 
     };
   } else {
     // Development settings (HTTP localhost)
     return {
       httpOnly: true,
-      secure: false, // CRITICAL: Must be FALSE on HTTP localhost to prevent silent rejection
-      sameSite: "lax", // Safest option for localhost cross-port access
+      secure: false, 
+      sameSite: "lax", 
     };
   }
 };
@@ -299,6 +298,45 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 });
 
 
+// === NEW FEATURE: TOGGLE NOTIFICATIONS CONTROLLER ===
+const updateNotificationPreferences = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    // We expect the body to contain the new settings object
+    const { browserNotifications, emailNotifications } = req.body; 
+
+    // 1. Input Validation
+    if (browserNotifications === undefined || emailNotifications === undefined) {
+        throw new ApiError(400, "Missing notification fields (browserNotifications, emailNotifications).");
+    }
+
+    // 2. Update the nested document field using the $set operator
+    const updatedUser = await User.findByIdAndUpdate(
+        userId,
+        {
+            $set: {
+                "notificationPreferences.browser": browserNotifications,
+                "notificationPreferences.email": emailNotifications,
+            },
+        },
+        // IMPORTANT: Return the new document
+        { new: true } 
+    );
+
+    if (!updatedUser) {
+        throw new ApiError(404, "User not found for update.");
+    }
+    
+    // 3. Return the updated safe user object so the frontend store can refresh its state
+    // NOTE: This sends the current, updated user object back to the client.
+    const userSafe = await getSafeUser(userId);
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, userSafe, "Notification preferences updated."));
+});
+// ====================================================
+
+
 // === NEW FEATURE: DELETE ACCOUNT CONTROLLER ===
 const deleteAccount = asyncHandler(async (req, res) => {
     const userId = req.user._id; // User ID attached by verifyJWT middleware
@@ -443,6 +481,7 @@ export {
   refreshAccessToken,
   getCurrentUser,
   updateAccountDetails,
+  updateNotificationPreferences, // <-- NEW EXPORT
   googleAuthCallback,
   googleAuthLogin,
   disconnectGoogle,

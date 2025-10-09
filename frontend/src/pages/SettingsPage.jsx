@@ -56,15 +56,15 @@ const getInitialSettings = (user) => ({
 
 export function SettingsPage() {
   // --- CRITICAL FIX START: Use separate, stable selectors ---
-  // State variables (can change, triggering component updates)
   const user = useAuthStore(state => state.user);
   const storeLoading = useAuthStore(state => state.isLoading);
   
-  // Action functions (stable references, should not trigger loop)
+  // Action functions (stable references)
   const logout = useAuthStore(state => state.logout);
   const updateCurrentUser = useAuthStore(state => state.updateCurrentUser);
   const disconnectGoogleAuth = useAuthStore(state => state.disconnectGoogleAuth);
   const deleteAccountAction = useAuthStore(state => state.deleteAccountAction);
+  const saveNotificationPreferences = useAuthStore(state => state.saveNotificationPreferences); // <-- NEW ACTION
   // --- CRITICAL FIX END ---
   
   const { theme, setTheme } = useTheme();
@@ -92,7 +92,7 @@ export function SettingsPage() {
             timezone: user.timezone || prev.timezone,
             browserNotifications: user.notificationPreferences?.browser || prev.browserNotifications,
             emailNotifications: user.notificationPreferences?.email || prev.emailNotifications,
-            googleCalendar: !!user.googleRefreshToken, // Derived state update
+            googleCalendar: !!user.googleRefreshToken, // Update derived state from user object
         }));
     }
   }, [user]); // Only depend on the entire user object
@@ -132,6 +132,39 @@ export function SettingsPage() {
   const handleSettingChange = (key, value) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
   };
+  
+  // === NEW FUNCTION: Handles the toggle and calls the backend immediately ===
+  const handleUpdateNotifications = async (key, value) => {
+    // 1. Optimistically update local state (for instant visual feedback)
+    handleSettingChange(key, value); 
+
+    setLocalLoading(true);
+    try {
+        // 2. Prepare the new preferences object using the CURRENT settings state
+        const preferences = {
+            browserNotifications: key === 'browserNotifications' ? value : settings.browserNotifications,
+            emailNotifications: key === 'emailNotifications' ? value : settings.emailNotifications,
+        };
+
+        // 3. Call the store action
+        const updatedUser = await saveNotificationPreferences(
+            preferences.browserNotifications, 
+            preferences.emailNotifications
+        );
+
+        // 4. Success: Local store is updated, toast success
+        toast.success(`${key.includes('browser') ? 'Browser' : 'Email'} notifications updated.`);
+
+    } catch (error) {
+        // 5. Failure: Revert the local setting and show error
+        handleSettingChange(key, !value); 
+        toast.error("Failed to save notification settings.");
+    } finally {
+        setLocalLoading(false);
+    }
+  };
+  // =======================================================================
+
 
   const handleConnectGoogle = () => {
     const userId = user?._id;
@@ -166,7 +199,7 @@ export function SettingsPage() {
   const handleSaveSettings = async () => {
     setLocalLoading(true);
     try {
-      // ⚠️ Add actual API call here to save settings (timezone, notifications, etc.)
+      // ⚠️ This is still the placeholder for other settings (name, timezone, etc.)
       await new Promise((resolve) => setTimeout(resolve, 1000));
       toast.success("Settings saved successfully! ✨");
     } catch (error) {
@@ -188,13 +221,9 @@ export function SettingsPage() {
     
     setLocalLoading(true);
     try {
-        // Call the store action, which executes the DELETE request on the backend
         await deleteAccountAction();
-        
-        // deleteAccountAction calls logout() internally upon success, which handles redirection
         toast.success("Account deleted. Farewell, mystical alchemist.");
     } catch (error) {
-        // Log out even on failure to clear client state
         if (error.response?.status !== 404) {
             toast.error("Failed to delete account. Logging out.");
         }
@@ -350,8 +379,9 @@ export function SettingsPage() {
                         id="browser-notifications"
                         checked={settings.browserNotifications}
                         onCheckedChange={(value) =>
-                          handleSettingChange("browserNotifications", value)
+                          handleUpdateNotifications("browserNotifications", value) // <-- CALLS NEW HANDLER
                         }
+                        disabled={isLoading}
                       />
                     </div>
 
@@ -368,8 +398,9 @@ export function SettingsPage() {
                         id="email-notifications"
                         checked={settings.emailNotifications}
                         onCheckedChange={(value) =>
-                          handleSettingChange("emailNotifications", value)
+                          handleUpdateNotifications("emailNotifications", value) // <-- CALLS NEW HANDLER
                         }
+                        disabled={isLoading}
                       />
                     </div>
 
@@ -388,6 +419,7 @@ export function SettingsPage() {
                         onCheckedChange={(value) =>
                           handleSettingChange("smsNotifications", value)
                         }
+                        disabled={isLoading}
                       />
                     </div>
                   </div>
@@ -401,6 +433,7 @@ export function SettingsPage() {
                       onValueChange={(value) =>
                         handleSettingChange("reminderBefore", value)
                       }
+                      disabled={isLoading}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -456,6 +489,7 @@ export function SettingsPage() {
                           onClick={handleDisconnectGoogle}
                           type="button"
                           className="hover:bg-red-500/10 hover:text-red-400"
+                          disabled={isLoading}
                         >
                           <LinkIcon className="w-4 h-4" />
                         </Button>
@@ -465,6 +499,7 @@ export function SettingsPage() {
                         onClick={handleConnectGoogle}
                         type="button"
                         className="magical-glow"
+                        disabled={isLoading}
                       >
                         Connect Calendar
                       </Button>
@@ -486,6 +521,7 @@ export function SettingsPage() {
                       onCheckedChange={(value) =>
                         handleSettingChange("appleHealth", value)
                       }
+                      disabled={isLoading}
                     />
                   </div>
                 </CardContent>
@@ -521,6 +557,7 @@ export function SettingsPage() {
                         onCheckedChange={(checked) =>
                           setTheme(checked ? "dark" : "light")
                         }
+                        disabled={isLoading}
                       />
                       <Moon className="w-4 h-4" />
                     </div>

@@ -144,21 +144,47 @@ const useAuthStore = create((set, get) => ({
     }
   },
   
+  // === NEW FEATURE: SAVE NOTIFICATION PREFERENCES ACTION ===
+  saveNotificationPreferences: async (browser, email) => {
+    set({ isLoading: true });
+    try {
+      // 1. Call the API to update preferences in the database
+      const updatedUserResponse = await authApi.updateNotifications({
+        browserNotifications: browser,
+        emailNotifications: email,
+      });
+
+      // 2. Update the local store state with the new user object received from the backend
+      const updatedUser = updatedUserResponse;
+      localStorage.setItem("alchemist_user", JSON.stringify(updatedUser));
+      set({ user: updatedUser });
+      
+      return updatedUser;
+    } catch (error) {
+      console.error("Failed to save notification settings:", error);
+      throw error;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+  // =========================================================
+
   // === NEW FEATURE: DELETE ACCOUNT ACTION ===
   deleteAccountAction: async () => {
     try {
-        await authApi.deleteAccount(); // Executes deletion and clears cookie on server side
+        // 1. Execute deletion on the server (which clears the RT cookie in the response)
+        await authApi.deleteAccount(); 
         
-        // CRITICAL FIX: Bypass the network call in logout.
-        // We call the final local cleanup directly to prevent the 401 loop.
+        // 2. CRITICAL FIX: Bypass the failing network call in logout.
+        // We manually clear local state to prevent the 401 loop and redirect.
         localStorage.removeItem("alchemist_user");
         localStorage.removeItem("alchemist_token");
-        set({ user: null, accessToken: null });
-        
+        set({ user: null, accessToken: null }); 
+
         return true;
     } catch (error) {
         console.error("Account deletion failed:", error);
-        // We still need to force a local logout/cleanup even if the delete API failed.
+        // Ensure logout runs cleanly even if the delete API failed (to clear local tokens)
         get().logout(); 
         throw error;
     }

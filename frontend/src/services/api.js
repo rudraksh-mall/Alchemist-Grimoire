@@ -144,7 +144,6 @@ export const chatApi = {
 // --- AUTH API: Implements two-step OTP flow using /users paths and new DELETE method ---
 export const authApi = {
   // CRITICAL FIX: Registration no longer returns tokens/user object.
-  // It returns only the email (or a success indicator) to move to the verification step.
   register: async (email, password, fullName) => {
     const { data } = await api.post(
       "/users/register",
@@ -180,14 +179,20 @@ export const authApi = {
 
   // === NEW FEATURE: DELETE ACCOUNT ===
   deleteAccount: async () => {
-    // Assuming backend route: DELETE /v1/users/delete-account
-    // This is an authenticated request, so we use the standard 'api' instance.
     const response = await api.delete("/users/delete-account");
     console.log(response.data);
     
     return response.data;
   },
   // ===================================
+  
+  // === NEW FEATURE: UPDATE NOTIFICATIONS ===
+  updateNotifications: async (preferences) => {
+    // PATCH /v1/users/notifications
+    const response = await api.patch("/users/notifications", preferences);
+    return response.data.data; // Should return the updated user object
+  },
+  // =========================================
 
   disconnectGoogle: async () => {
     const response = await api.delete("/users/google/disconnect"); 
