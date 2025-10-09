@@ -4,7 +4,7 @@ import { create } from "zustand";
 import api, { authApi } from "../services/api.js"; 
 
 
-// --- CRITICAL FIX START: Safe Initialization ---
+// --- CRITICAL FIX START: Safest Initialization ---
 
 const getInitialUser = () => {
     // 1. Get the raw string from localStorage.
@@ -20,8 +20,13 @@ const getInitialUser = () => {
         const parsed = JSON.parse(rawUser);
 
         // 4. CHECK 3: Ensure the parsed object has the expected 'user' structure, otherwise return null.
-        // This prevents crashes if localStorage contains corrupted, but valid, JSON (e.g., '123' or 'true').
-        return parsed.user || parsed || null; 
+        const userObject = parsed.user || parsed; 
+
+        // 5. Final check: Ensure we have a valid object with at least an _id (the minimum structure).
+        if (userObject && typeof userObject === 'object' && userObject._id) {
+             return userObject;
+        }
+        return null;
     } catch (e) {
         // 5. If parsing fails (e.g., corrupted JSON), log error and return null.
         console.error("Corrupted JSON in localStorage. User data reset.", e);
@@ -54,8 +59,9 @@ const useAuthStore = create((set, get) => ({
 
     try {
       // Use the default API instance imported as 'api'
-      const { data } = await api.get("/users/current-user");
-      // 🎯 FIX: Ensure user object is saved correctly
+      // CRITICAL FIX: Removed redundant '/v1' prefix from the path.
+      const { data } = await api.get("/users/current-user"); 
+      
       const currentUser = data.data; 
       localStorage.setItem("alchemist_user", JSON.stringify(currentUser)); 
       
@@ -65,7 +71,8 @@ const useAuthStore = create((set, get) => ({
         isLoading: false,
       });
     } catch (error) {
-      console.error("Token invalid or expired:", error);
+      // This catch now triggers the interceptor, which attempts refresh.
+      console.error("Token invalid or expired:", error); 
       get().logout();
     } finally {
       set({ isLoading: false });
@@ -75,7 +82,7 @@ const useAuthStore = create((set, get) => ({
   // 🎯 NEW ACTION: Manually fetch and update the current user object
   updateCurrentUser: async () => {
     try {
-      // NOTE: Path updated to match the final consolidated route: /v1/users/current-user
+      // 🎯 CRITICAL FIX: Removed redundant '/v1' prefix from the path.
       const { data } = await api.get("/users/current-user");
       const updatedUser = data.data;
 
@@ -85,17 +92,13 @@ const useAuthStore = create((set, get) => ({
       return updatedUser;
     } catch (error) {
       console.error("Failed to update current user state:", error);
-      // Optional: if failed, log out user
-      // get().logout(); 
     }
   },
 
   // 🎯 NEW ACTION: Finalizes login after successful OTP verification
   finalizeLogin: (user, accessToken) => {
-    // This function is called by the LoginPage after successful /verify-otp
     localStorage.setItem("alchemist_user", JSON.stringify(user));
     localStorage.setItem("alchemist_token", accessToken);
-
     set({ user, accessToken, isLoading: false });
   },
 
@@ -104,7 +107,6 @@ const useAuthStore = create((set, get) => ({
     set({ isLoading: true });
     try {
       // 1. Call the backend to create the user and send the OTP.
-      // NOTE: We assume authApi.register returns { email } and NOT tokens/user object.
       await authApi.register(email, password, fullName);
 
       // Returning the email confirms success and allows the frontend to track who needs verification.
@@ -118,9 +120,6 @@ const useAuthStore = create((set, get) => ({
   googleAuth: async () => {
     set({ isLoading: true });
     try {
-      // NOTE: This function currently requires manual handling of the redirect 
-      // since it's hard to get data back from a direct browser call in a store function.
-      // We keep it as-is based on your original file's structure.
       const response = await authApi.googleAuth();
       const { user, accessToken } = response;
 
@@ -136,20 +135,39 @@ const useAuthStore = create((set, get) => ({
   // 🎯 NEW ACTION: Disconnects Google Calendar and refreshes state
   disconnectGoogleAuth: async () => {
     try {
-      // NOTE: Path updated to match the final consolidated route: /v1/users/google/disconnect
       await authApi.disconnectGoogle(); 
-      get().updateCurrentUser(); // Refresh the user object to clear the token field
+      get().updateCurrentUser();
       return true;
     } catch (err) {
       console.error("Google disconnect failed:", err);
       throw err;
     }
   },
+  
+  // === NEW FEATURE: DELETE ACCOUNT ACTION ===
+  deleteAccountAction: async () => {
+    try {
+        await authApi.deleteAccount(); // Executes deletion and clears cookie on server side
+        
+        // CRITICAL FIX: Bypass the network call in logout.
+        // We call the final local cleanup directly to prevent the 401 loop.
+        localStorage.removeItem("alchemist_user");
+        localStorage.removeItem("alchemist_token");
+        set({ user: null, accessToken: null });
+        
+        return true;
+    } catch (error) {
+        console.error("Account deletion failed:", error);
+        // We still need to force a local logout/cleanup even if the delete API failed.
+        get().logout(); 
+        throw error;
+    }
+  },
+  // ==========================================
 
   // LOGOUT
   logout: async () => {
     try {
-      // NOTE: Path updated to match the final consolidated route: /v1/users/logout
       await authApi.logout();
     } catch (err) {
       console.error("Logout failed:", err);
@@ -163,7 +181,6 @@ const useAuthStore = create((set, get) => ({
   // REFRESH TOKEN
   refreshAccessToken: async () => {
     try {
-      // NOTE: Path updated to match the final consolidated route: /v1/users/refresh-token
       const refreshed = await authApi.refreshToken();
       const { accessToken } = refreshed;
       localStorage.setItem("alchemist_token", accessToken);
@@ -181,12 +198,8 @@ const useAuthStore = create((set, get) => ({
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    // FIX: Retrieve functions *inside* the async block where the error check occurs.
     const originalRequest = error.config;
     const requestUrl = originalRequest.url || "";
-
-    // 🎯 CRITICAL FIX: The check below causes the infinite loop.
-    // The `useAuthStore.getState()` must only be called if the error condition is met.
     
     if (
       error.response?.status === 401 &&
@@ -197,7 +210,6 @@ api.interceptors.response.use(
       !requestUrl.includes("users/register") &&
       !requestUrl.includes("auth/google/callback")
     ) {
-      // Retrieve the functions ONLY when we know we need to retry
       const { refreshAccessToken, logout } = useAuthStore.getState();
 
       originalRequest._retry = true;

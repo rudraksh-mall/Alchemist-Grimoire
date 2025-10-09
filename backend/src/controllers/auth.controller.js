@@ -2,6 +2,10 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/user.model.js";
+// --- NEW IMPORT FOR CASCADING DELETION ---
+import { DoseLog } from "../models/doseLog.model.js"; // ASSUMED path
+import { MedicationSchedule } from "../models/medicationSchedule.model.js"; // ASSUMED path
+// ------------------------------------------
 import { oauth2Client, SCOPES } from "../utils/googleAuth.js";
 import { StatusCodes } from "http-status-codes";
 import jwt from "jsonwebtoken";
@@ -12,22 +16,41 @@ import { sendEmail } from '../services/email.service.js';
 // ----------------------------------
 
 
+// --- Helper Function: Defines Robust Cookie Options (Used in multiple places) ---
+const getCookieOptions = () => {
+  if (process.env.NODE_ENV === "production") {
+    // Production settings (requires HTTPS)
+    return {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none", // Must be "none" for cross-origin access
+      // You should also set 'expires' or 'maxAge' here for long-lived tokens
+    };
+  } else {
+    // Development settings (HTTP localhost)
+    return {
+      httpOnly: true,
+      secure: false, // CRITICAL: Must be FALSE on HTTP localhost to prevent silent rejection
+      sameSite: "lax", // Safest option for localhost cross-port access
+    };
+  }
+};
+// -----------------------------------------------------------------------------
+
+
 // Function to safely return a user object without sensitive fields
 const getSafeUser = async (userId) => {
     // NOTE: This now excludes the new OTP fields (emailVerificationToken, emailVerificationExpires)
     return await User.findById(userId).select("-password -refreshToken -emailVerificationToken -emailVerificationExpires");
 }
 
-// REVISED: generateAccessAndRefreshTokens (backend/src/controllers/auth.controller.js)
+// REVISED: generateAccessAndRefreshTokens (Handles token creation and saving)
 
 const generateAccessAndRefreshTokens = async (userId) => {
   try {
-    // 1. Fetch the user
     const user = await User.findById(userId);
-    console.log("User fetched (for token gen):", user ? "Found" : "Not Found"); // Debug log
 
     if (!user) {
-      // If the user is not found, return null and let the calling function handle the 401.
       return { accessToken: null, refreshToken: null };
     }
 
@@ -49,7 +72,7 @@ const generateAccessAndRefreshTokens = async (userId) => {
   }
 };
 
-// Registering User (MODIFIED FOR OTP FLOW)
+// Registering User (MODIFIED FOR OTP FLOW - Step 1: Create User & Send OTP)
 
 const registerUser = asyncHandler(async (req, res) => {
   const { fullName, email, password, timezone } = req.body;
@@ -70,10 +93,10 @@ const registerUser = asyncHandler(async (req, res) => {
     isVerified: false, 
   });
   
-  // 2. Generate and save the OTP (this also updates the token fields on the user document)
+  // 2. Generate and save the OTP 
   const rawOtp = await generateAndSaveOtp(email);
 
-  // 3. Send the email (Circus Crier)
+  // 3. Send the email 
   await sendEmail({
       to: email,
       subject: "🎪 Alchemist's Grimoire: Your Registration Code",
@@ -89,7 +112,7 @@ const registerUser = asyncHandler(async (req, res) => {
       `
   });
   
-  // 4. Return success response. DO NOT generate tokens here.
+  // 4. Return success response. (Frontend moves to verification step)
   return res
     .status(201)
     .json(
@@ -101,7 +124,7 @@ const registerUser = asyncHandler(async (req, res) => {
     );
 });
 
-// --- NEW FUNCTION: Send OTP (Replaces the first step of traditional login) ---
+// --- NEW FUNCTION: Send OTP (Login Step 1: Check Password & Send Code) ---
 const sendOtp = asyncHandler(async (req, res) => {
     const { email, password } = req.body;
     
@@ -114,7 +137,7 @@ const sendOtp = asyncHandler(async (req, res) => {
         throw new ApiError(404, "User not found.");
     }
 
-    // 1. Validate the password first (Security Step)
+    // 1. Validate the password first
     const isPasswordValid = await user.isPasswordCorrect(password);
     if (!isPasswordValid) {
         throw new ApiError(401, "Invalid credentials.");
@@ -156,7 +179,7 @@ const verifyOtpAndLogin = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Email and One-Time Password (OTP) are required.");
     }
 
-    // 1. Verify the OTP using the service (This also clears the token and sets isVerified=true)
+    // 1. Verify the OTP using the service 
     const verificationResult = await verifyOtp(email, otp);
 
     if (!verificationResult.success) {
@@ -170,10 +193,11 @@ const verifyOtpAndLogin = asyncHandler(async (req, res) => {
         user._id
     );
 
-    const options = {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-    };
+    // CRITICAL FIX: Use the robust options getter
+    const options = getCookieOptions(); 
+    
+    // DEBUG LOG 1: Log the cookie options being set during successful login/verification
+    console.log(`[DEBUG-AUTH] Setting Refresh Token Cookie with options:`, options);
     
     const userSafe = await getSafeUser(user._id);
 
@@ -191,7 +215,6 @@ const verifyOtpAndLogin = asyncHandler(async (req, res) => {
 });
 
 // REMOVED: The old 'loginUser' is functionally replaced by sendOtp and verifyOtpAndLogin.
-// If you want to keep the old route name but use the new logic:
 const loginUser = sendOtp; // Alias loginUser to the first step of the new flow.
 
 
@@ -199,12 +222,12 @@ const loginUser = sendOtp; // Alias loginUser to the first step of the new flow.
 
 const logoutUser = asyncHandler(async (req, res) => {
   await User.findByIdAndUpdate(req.user._id, { $unset: { refreshToken: 1 } });
-  const options = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-  };
+  
+  // CRITICAL FIX: Ensure clearCookie uses the same options set during cookie creation
+  const options = getCookieOptions();
+  
   res
-    .clearCookie("refreshToken", options)
+    .clearCookie("refreshToken", options) // <-- Must include same options for clearing
     .status(200)
     .json(new ApiResponse(200, {}, "Logged out successfully"));
 });
@@ -221,9 +244,25 @@ const getCurrentUser = asyncHandler(async (req, res) => {
 // REFRESH ACCESS TOKEN
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
+  // DEBUG LOG 2: Check the raw incoming cookie header
+  console.log(`\n--- REFRESH ATTEMPT ---`);
+  console.log(`[DEBUG-REFRESH-1] Incoming Request URL: ${req.originalUrl}`);
+  
+  // Check req.headers.cookie for raw string (more reliable than Express's req.cookies)
+  // We cannot console.log req.headers.cookie due to security, but req.cookies is what Express parses.
+  console.log(`[DEBUG-REFRESH-2] Parsed Cookies (Express):`, req.cookies);
+
   const incomingRefreshToken =
     req.cookies.refreshToken || req.body.refreshToken;
-  if (!incomingRefreshToken) throw new ApiError(401, "Unauthorized request");
+
+  // DEBUG LOG 3: Check if the token was successfully extracted
+  if (!incomingRefreshToken) {
+      console.error(`[DEBUG-REFRESH-FAIL] Token Missing! Browser did not send the cookie.`);
+      throw new ApiError(401, "Unauthorized request: Refresh token missing.");
+  }
+  
+  // DEBUG LOG 4: Log if JWT verification fails (Token is expired/malformed)
+  console.log(`[DEBUG-REFRESH] Refresh Token Extracted. Attempting verification...`);
 
   let decodedToken;
   try {
@@ -232,22 +271,24 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
       process.env.REFRESH_TOKEN_SECRET
     );
   } catch (err) {
-    throw new ApiError(401, "Invalid refresh token");
+    console.error(`[DEBUG-REFRESH-FAIL] JWT Verification Failed:`, err.message);
+    throw new ApiError(401, "Invalid refresh token"); 
   }
+  
   const user = await User.findById(decodedToken._id);
 
   // 🎯 FIX: Combined check to prevent access to user.refreshToken if user is null 🎯
   if (!user || incomingRefreshToken !== user.refreshToken) {
-    // If user is null (not found) OR tokens don't match (revoked)
     throw new ApiError(401, "Refresh token invalid or expired");
   }
   const { accessToken, refreshToken: newRefreshToken } =
     await generateAccessAndRefreshTokens(user._id);
 
-  const options = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-  };
+  // CRITICAL FIX: Use the robust options getter
+  const options = getCookieOptions();
+  
+  // DEBUG LOG 5: Log the new cookie options before sending a new one.
+  console.log(`[DEBUG-REFRESH-SUCCESS] Renewed RT. New Options:`, options);
 
   return res
     .cookie("refreshToken", newRefreshToken, options)
@@ -256,6 +297,36 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
       new ApiResponse(200, { token: accessToken }, "Access token refreshed")
     );
 });
+
+
+// === NEW FEATURE: DELETE ACCOUNT CONTROLLER ===
+const deleteAccount = asyncHandler(async (req, res) => {
+    const userId = req.user._id; // User ID attached by verifyJWT middleware
+
+    // 1. Delete all associated Dose Logs
+    await DoseLog.deleteMany({ userId });
+    
+    // 2. Delete all Medication Schedules
+    await MedicationSchedule.deleteMany({ userId });
+
+    // 3. Delete the User record itself
+    const user = await User.findByIdAndDelete(userId);
+
+    if (!user) {
+        // This should not happen if the user was authenticated, but is a safe guard
+        throw new ApiError(404, "User account not found for deletion.");
+    }
+
+    // 4. Clear the cookies/session (Frontend store handles logout/redirection)
+    const options = getCookieOptions(); 
+    res.clearCookie("refreshToken", options);
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, null, "Account deleted successfully."));
+});
+// ==============================================
+
 
 const updateAccountDetails = asyncHandler(async (req, res) => {
   const { fullName, email, timezone } = req.body;
@@ -374,5 +445,6 @@ export {
   updateAccountDetails,
   googleAuthCallback,
   googleAuthLogin,
-  disconnectGoogle, 
+  disconnectGoogle,
+  deleteAccount // <-- NEW EXPORT
 };

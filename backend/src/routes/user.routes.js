@@ -13,7 +13,9 @@ import {
   // --- NEW IMPORTS ---
   sendOtp,
   verifyOtpAndLogin, 
-  // -------------------
+  // --- DELETE ACCOUNT IMPORT ---
+  deleteAccount, // <--- NEW IMPORT
+  // -----------------------------
 } from "../controllers/auth.controller.js";
 
 import { verifyJWT } from "../middleware/auth.middleware.js";
@@ -22,7 +24,7 @@ const router = Router();
 
 // --- PUBLIC ROUTES (NO JWT REQUIRED) ---
 
-// TOKEN REFRESH: MUST be defined early and unprotected. (Moved up)
+// TOKEN REFRESH: MUST be defined early and unprotected.
 router.route("/refresh-token").post(refreshAccessToken);
 
 // REGISTRATION & OTP LOGIN FLOW
@@ -41,5 +43,10 @@ router.route("/logout").post(logoutUser);
 router.route("/current-user").get(getCurrentUser);
 router.route("/update-details").patch(updateAccountDetails);
 router.route("/google/disconnect").delete(disconnectGoogle);
+
+// === NEW SECURED ROUTE: DELETE ACCOUNT ===
+// This requires a valid JWT and performs cascading deletion.
+router.route("/delete-account").delete(deleteAccount); 
+// =========================================
 
 export default router;

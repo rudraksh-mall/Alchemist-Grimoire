@@ -8,51 +8,98 @@ import {
   Mail,
   Calendar,
   User,
-  Shield,
   Moon,
   Sun,
   Save,
   Trash2,
   Check, 
-  Link, 
+  Link as LinkIcon, 
+  Loader2
 } from "lucide-react";
-import useAuthStore from "../hooks/useAuthStore";
-import { Sidebar } from "../components/Sidebar";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { Label } from "../components/ui/label";
+import useAuthStore from "../hooks/useAuthStore.js";
+import { Sidebar } from "../components/Sidebar.jsx";
+import { Button } from "../components/ui/button.jsx";
+import { Input } from "../components/ui/input.jsx";
+import { Label } from "../components/ui/label.jsx";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from "../components/ui/card";
-import { Switch } from "../components/ui/switch";
+} from "../components/ui/card.jsx";
+import { Switch } from "../components/ui/switch.jsx";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../components/ui/select";
-import { Separator } from "../components/ui/separator";
-import { Alert, AlertDescription } from "../components/ui/alert";
-import { useTheme } from "../components/ThemeProvider";
+} from "../components/ui/select.jsx";
+import { Separator } from "../components/ui/separator.jsx";
+import { Alert, AlertDescription } from "../components/ui/alert.jsx";
+import { useTheme } from "../components/ThemeProvider.jsx";
 import { toast } from "sonner";
 
+// Helper function to safely initialize state only once
+const getInitialSettings = (user) => ({
+    name: user?.fullName || "", // Use fullName to match schema
+    email: user?.email || "",
+    timezone: user?.timezone || "America/New_York",
+    browserNotifications: user?.notificationPreferences?.browser ?? true, 
+    emailNotifications: user?.notificationPreferences?.email ?? false,
+    smsNotifications: false,
+    reminderBefore: "15",
+    appleHealth: false,
+    dataSharing: false,
+    analytics: true,
+});
+
 export function SettingsPage() {
-  // 🎯 FIX: Destructure disconnectGoogleAuth (assuming implemented in useAuthStore)
-  const { user, logout, updateCurrentUser, disconnectGoogleAuth } = useAuthStore(); 
+  // --- CRITICAL FIX START: Use separate, stable selectors ---
+  // State variables (can change, triggering component updates)
+  const user = useAuthStore(state => state.user);
+  const storeLoading = useAuthStore(state => state.isLoading);
+  
+  // Action functions (stable references, should not trigger loop)
+  const logout = useAuthStore(state => state.logout);
+  const updateCurrentUser = useAuthStore(state => state.updateCurrentUser);
+  const disconnectGoogleAuth = useAuthStore(state => state.disconnectGoogleAuth);
+  const deleteAccountAction = useAuthStore(state => state.deleteAccountAction);
+  // --- CRITICAL FIX END ---
+  
   const { theme, setTheme } = useTheme();
-  const [isLoading, setIsLoading] = useState(false);
+  
+  const [localLoading, setLocalLoading] = useState(false);
+  const isLoading = storeLoading || localLoading;
 
   const navigate = useNavigate();
 
-  // 🎯 CRITICAL FIX 1: Derive connection status from the token presence
+  // Derive stable status value
   const isGoogleConnected = !!(user?.googleRefreshToken);
 
-  // 🎯 CRITICAL FIX 2: Check URL for OAuth success/error flag and refresh user state
+  // Initialize state using the function form, which is safer.
+  const [settings, setSettings] = useState(() => getInitialSettings(user));
+
+
+  // --- FIX 1: Update settings only when the central user object changes ---
   useEffect(() => {
+    // This runs after login, updateCurrentUser, etc., ensuring local state reflects user data
+    if (user) {
+        setSettings(prev => ({
+            ...prev,
+            name: user.fullName || prev.name,
+            email: user.email || prev.email,
+            timezone: user.timezone || prev.timezone,
+            browserNotifications: user.notificationPreferences?.browser || prev.browserNotifications,
+            emailNotifications: user.notificationPreferences?.email || prev.emailNotifications,
+            googleCalendar: !!user.googleRefreshToken, // Derived state update
+        }));
+    }
+  }, [user]); // Only depend on the entire user object
+
+  // --- FIX 2: Handle URL OAuth success/error flag and initial navigation ---
+  useEffect(() => {
+    // If user is null, redirect to login page immediately (App Protection)
     if (!user) {
         navigate("/login");
         return;
@@ -62,47 +109,24 @@ export function SettingsPage() {
     const calendarSyncSuccess = params.get('calendar_sync');
     const calendarSyncError = params.get('error');
 
-    if (calendarSyncSuccess === 'success') {
-        toast.success("Calendar connected successfully! Syncing potions.");
-        updateCurrentUser(); // Force state update to show 'Connected'
-    } else if (calendarSyncError) {
-        let errorMessage = "Synchronization failed. Please try again.";
-        
-        if (calendarSyncError === 'no_refresh_token') {
-            errorMessage = "Connection failed: Google did not grant permanent access. Please ensure you grant full access when prompted.";
-        } else if (calendarSyncError === 'access_denied') {
-            errorMessage = "Connection denied by user.";
-        }
-
-        toast.error(errorMessage);
-    }
-        
-    // Clean up the URL query parameter after processing
     if (calendarSyncSuccess || calendarSyncError) {
-        navigate('/settings', { replace: true }); 
+      if (calendarSyncSuccess === 'success') {
+          toast.success("Calendar connected successfully! Syncing potions.");
+          updateCurrentUser(); 
+      } else if (calendarSyncError) {
+          let errorMessage = "Synchronization failed. Please try again.";
+          if (calendarSyncError === 'no_refresh_token') {
+              errorMessage = "Connection failed: Google did not grant permanent access. Please ensure you grant full access when prompted.";
+          } else if (calendarSyncError === 'access_denied') {
+              errorMessage = "Connection denied by user.";
+          }
+          toast.error(errorMessage);
+      }
+          
+      // Clean up the URL query parameter after processing
+      navigate('/settings', { replace: true }); 
     }
-
   }, [user, navigate, updateCurrentUser]); 
-
-  const [settings, setSettings] = useState({
-    name: user?.name || "",
-    email: user?.email || "",
-    timezone: user?.timezone || "America/New_York",
-    browserNotifications: true,
-    emailNotifications: false,
-    smsNotifications: false,
-    reminderBefore: "15",
-    // Initialize state using the derived status
-    googleCalendar: isGoogleConnected, 
-    appleHealth: false,
-    dataSharing: false,
-    analytics: true,
-  });
-
-  // Listen to changes in isGoogleConnected to update the local state when the user object updates
-  useEffect(() => {
-    setSettings(prev => ({ ...prev, googleCalendar: isGoogleConnected }));
-  }, [isGoogleConnected]);
   
 
   const handleSettingChange = (key, value) => {
@@ -110,7 +134,7 @@ export function SettingsPage() {
   };
 
   const handleConnectGoogle = () => {
-    const userId = user?._id || user?.id;
+    const userId = user?._id;
 
     if (!userId) {
       toast.error("Please log in again to connect your calendar.");
@@ -127,23 +151,20 @@ export function SettingsPage() {
         return;
     }
 
-    setIsLoading(true);
+    setLocalLoading(true);
     try {
-        // Calls the store action to send DELETE request and clear token in DB
         await disconnectGoogleAuth(); 
         toast.success("Google Calendar disconnected successfully.");
-        // updateCurrentUser() is called inside disconnectGoogleAuth
     } catch (error) {
         toast.error("Failed to disconnect calendar.");
-        console.error("Disconnect error:", error);
     } finally {
-        setIsLoading(false);
+        setLocalLoading(false);
     }
   }
 
 
   const handleSaveSettings = async () => {
-    setIsLoading(true);
+    setLocalLoading(true);
     try {
       // ⚠️ Add actual API call here to save settings (timezone, notifications, etc.)
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -151,24 +172,35 @@ export function SettingsPage() {
     } catch (error) {
       toast.error("Failed to save settings");
     } finally {
-      setIsLoading(false);
+      setLocalLoading(false);
     }
   };
 
+  // 🎯 DELETE ACCOUNT FUNCTIONALITY
   const handleDeleteAccount = async () => {
-    if (
-      window.confirm(
-        "Are you sure you want to delete your account? This action cannot be undone."
-      )
-    ) {
-      try {
-        // ⚠️ Add actual API call here to delete the user account
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+    const isConfirmed = window.confirm(
+        "Are you absolutely sure you want to delete your account? All schedules and logs will be permanently removed."
+    );
+    
+    if (!isConfirmed) {
+      return;
+    }
+    
+    setLocalLoading(true);
+    try {
+        // Call the store action, which executes the DELETE request on the backend
+        await deleteAccountAction();
+        
+        // deleteAccountAction calls logout() internally upon success, which handles redirection
         toast.success("Account deleted. Farewell, mystical alchemist.");
-        logout();
-      } catch (error) {
-        toast.error("Failed to delete account");
-      }
+    } catch (error) {
+        // Log out even on failure to clear client state
+        if (error.response?.status !== 404) {
+            toast.error("Failed to delete account. Logging out.");
+        }
+        logout(); // Ensure logout occurs on client side
+    } finally {
+        setLocalLoading(false);
     }
   };
 
@@ -238,6 +270,7 @@ export function SettingsPage() {
                       <Label htmlFor="name">Mystical Name</Label>
                       <Input
                         id="name"
+                        // Display value comes directly from local state
                         value={settings.name}
                         onChange={(e) =>
                           handleSettingChange("name", e.target.value)
@@ -250,6 +283,7 @@ export function SettingsPage() {
                       <Input
                         id="email"
                         type="email"
+                        // Display value comes directly from local state
                         value={settings.email}
                         onChange={(e) =>
                           handleSettingChange("email", e.target.value)
@@ -407,7 +441,7 @@ export function SettingsPage() {
                         Sync medicine schedules with Google Calendar
                       </p>
                     </div>
-                    {/* 🎯 Updated Conditional Rendering */}
+                    {/* 🎯 Use the derived stable value directly in JSX */}
                     {isGoogleConnected ? (
                       <div className="flex space-x-2">
                         <Button 
@@ -423,7 +457,7 @@ export function SettingsPage() {
                           type="button"
                           className="hover:bg-red-500/10 hover:text-red-400"
                         >
-                          <Link className="w-4 h-4" />
+                          <LinkIcon className="w-4 h-4" />
                         </Button>
                       </div>
                     ) : (
@@ -516,7 +550,7 @@ export function SettingsPage() {
                       ease: "linear",
                     }}
                   >
-                    <Save className="w-4 h-4" />
+                    <Loader2 className="w-4 h-4" />
                   </motion.div>
                 ) : (
                   <>
@@ -530,8 +564,13 @@ export function SettingsPage() {
                 variant="destructive"
                 onClick={handleDeleteAccount}
                 className="sm:w-auto"
+                disabled={isLoading}
               >
-                <Trash2 className="w-4 h-4 mr-2" />
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Trash2 className="w-4 h-4 mr-2" />
+                )}
                 Delete Account
               </Button>
             </motion.div>
