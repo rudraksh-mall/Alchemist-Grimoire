@@ -54,7 +54,7 @@ const useAuthStore = create((set, get) => ({
 
     try {
       // Use the default API instance imported as 'api'
-      const { data } = await api.get("/v1/users/current-user");
+      const { data } = await api.get("/users/current-user");
       // 🎯 FIX: Ensure user object is saved correctly
       const currentUser = data.data; 
       localStorage.setItem("alchemist_user", JSON.stringify(currentUser)); 
@@ -76,7 +76,7 @@ const useAuthStore = create((set, get) => ({
   updateCurrentUser: async () => {
     try {
       // NOTE: Path updated to match the final consolidated route: /v1/users/current-user
-      const { data } = await api.get("/v1/users/current-user");
+      const { data } = await api.get("/users/current-user");
       const updatedUser = data.data;
 
       // Update local storage and state
