@@ -37,7 +37,7 @@ export function DoseCard({ dose, onTake, onSkip, onSnooze, showActions = true })
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
-      timeZone: 'UTC' 
+      // timeZone: 'UTC' 
     });
   };
 
@@ -46,7 +46,7 @@ export function DoseCard({ dose, onTake, onSkip, onSnooze, showActions = true })
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
-      timeZone: 'UTC' 
+      // timeZone: 'UTC' 
     });
   };
 
