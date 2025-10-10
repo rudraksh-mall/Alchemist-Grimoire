@@ -1,38 +1,37 @@
 import { create } from "zustand";
 // FIX: Import the default export (the main Axios instance) as 'api',
 // and import 'authApi' as a named export.
-import api, { authApi } from "../services/api.js"; 
-
+import api, { authApi } from "../services/api.js";
 
 // --- CRITICAL FIX START: Safest Initialization ---
 
 const getInitialUser = () => {
-    // 1. Get the raw string from localStorage.
-    const rawUser = localStorage.getItem("alchemist_user");
+  // 1. Get the raw string from localStorage.
+  const rawUser = localStorage.getItem("alchemist_user");
 
-    // 2. CHECK 1: If the item is the literal string "undefined", treat it as empty.
-    if (!rawUser || rawUser === 'undefined' || rawUser === 'null') {
-        return null;
+  // 2. CHECK 1: If the item is the literal string "undefined", treat it as empty.
+  if (!rawUser || rawUser === "undefined" || rawUser === "null") {
+    return null;
+  }
+
+  try {
+    // 3. CHECK 2: Attempt to parse the valid string.
+    const parsed = JSON.parse(rawUser);
+
+    // 4. CHECK 3: Ensure the parsed object has the expected 'user' structure, otherwise return null.
+    const userObject = parsed.user || parsed;
+
+    // 5. Final check: Ensure we have a valid object with at least an _id (the minimum structure).
+    if (userObject && typeof userObject === "object" && userObject._id) {
+      return userObject;
     }
-
-    try {
-        // 3. CHECK 2: Attempt to parse the valid string.
-        const parsed = JSON.parse(rawUser);
-
-        // 4. CHECK 3: Ensure the parsed object has the expected 'user' structure, otherwise return null.
-        const userObject = parsed.user || parsed; 
-
-        // 5. Final check: Ensure we have a valid object with at least an _id (the minimum structure).
-        if (userObject && typeof userObject === 'object' && userObject._id) {
-             return userObject;
-        }
-        return null;
-    } catch (e) {
-        // 5. If parsing fails (e.g., corrupted JSON), log error and return null.
-        console.error("Corrupted JSON in localStorage. User data reset.", e);
-        localStorage.removeItem("alchemist_user");
-        return null;
-    }
+    return null;
+  } catch (e) {
+    // 5. If parsing fails (e.g., corrupted JSON), log error and return null.
+    console.error("Corrupted JSON in localStorage. User data reset.", e);
+    localStorage.removeItem("alchemist_user");
+    return null;
+  }
 };
 
 const initialUser = getInitialUser();
@@ -45,7 +44,7 @@ const useAuthStore = create((set, get) => ({
   user: initialUser,
   accessToken: initialToken,
   isLoading: true,
-  
+
   // NEW: Setter for local loading state in the component
   setIsLoading: (status) => set({ isLoading: status }),
 
@@ -60,11 +59,11 @@ const useAuthStore = create((set, get) => ({
     try {
       // Use the default API instance imported as 'api'
       // CRITICAL FIX: Removed redundant '/v1' prefix from the path.
-      const { data } = await api.get("/users/current-user"); 
-      
-      const currentUser = data.data; 
-      localStorage.setItem("alchemist_user", JSON.stringify(currentUser)); 
-      
+      const { data } = await api.get("/users/current-user");
+
+      const currentUser = data.data;
+      localStorage.setItem("alchemist_user", JSON.stringify(currentUser));
+
       set({
         user: currentUser,
         accessToken: savedToken,
@@ -72,7 +71,7 @@ const useAuthStore = create((set, get) => ({
       });
     } catch (error) {
       // This catch now triggers the interceptor, which attempts refresh.
-      console.error("Token invalid or expired:", error); 
+      console.error("Token invalid or expired:", error);
       get().logout();
     } finally {
       set({ isLoading: false });
@@ -95,6 +94,30 @@ const useAuthStore = create((set, get) => ({
     }
   },
 
+  // === NEW FEATURE: SAVE ALL USER SETTINGS (Timezone, Reminder Timing, Name) ===
+  updateUserSettingsAction: async (settingsData) => {
+    set({ isLoading: true });
+    try {
+      // 1. Call the API to update general settings
+      const updatedUserResponse = await authApi.updateUserSettings(
+        settingsData
+      );
+
+      // 2. Update the local store state with the new user object
+      const updatedUser = updatedUserResponse;
+      localStorage.setItem("alchemist_user", JSON.stringify(updatedUser));
+      set({ user: updatedUser });
+
+      return updatedUser;
+    } catch (error) {
+      console.error("Failed to save user settings:", error);
+      throw error;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+  // ============================================================================
+
   // 🎯 NEW ACTION: Finalizes login after successful OTP verification
   finalizeLogin: (user, accessToken) => {
     localStorage.setItem("alchemist_user", JSON.stringify(user));
@@ -110,7 +133,7 @@ const useAuthStore = create((set, get) => ({
       await authApi.register(email, password, fullName);
 
       // Returning the email confirms success and allows the frontend to track who needs verification.
-      return email; 
+      return email;
     } finally {
       set({ isLoading: false });
     }
@@ -135,7 +158,7 @@ const useAuthStore = create((set, get) => ({
   // 🎯 NEW ACTION: Disconnects Google Calendar and refreshes state
   disconnectGoogleAuth: async () => {
     try {
-      await authApi.disconnectGoogle(); 
+      await authApi.disconnectGoogle();
       get().updateCurrentUser();
       return true;
     } catch (err) {
@@ -143,7 +166,7 @@ const useAuthStore = create((set, get) => ({
       throw err;
     }
   },
-  
+
   // === NEW FEATURE: SAVE NOTIFICATION PREFERENCES ACTION ===
   saveNotificationPreferences: async (browser, email) => {
     set({ isLoading: true });
@@ -158,7 +181,7 @@ const useAuthStore = create((set, get) => ({
       const updatedUser = updatedUserResponse;
       localStorage.setItem("alchemist_user", JSON.stringify(updatedUser));
       set({ user: updatedUser });
-      
+
       return updatedUser;
     } catch (error) {
       console.error("Failed to save notification settings:", error);
@@ -174,13 +197,15 @@ const useAuthStore = create((set, get) => ({
     set({ isLoading: true });
     try {
       // 1. Call the API to save/update the subscription object
-      const updatedUserResponse = await authApi.saveSubscription(subscriptionObject);
+      const updatedUserResponse = await authApi.saveSubscription(
+        subscriptionObject
+      );
 
       // 2. Update the local store state with the new user object (which now has the subscription)
       const updatedUser = updatedUserResponse;
       localStorage.setItem("alchemist_user", JSON.stringify(updatedUser));
       set({ user: updatedUser });
-      
+
       return updatedUser;
     } catch (error) {
       console.error("Failed to save browser subscription:", error);
@@ -194,18 +219,18 @@ const useAuthStore = create((set, get) => ({
   // === NEW FEATURE: DELETE ACCOUNT ACTION ===
   deleteAccountAction: async () => {
     try {
-        await authApi.deleteAccount(); 
-        
-        // CRITICAL FIX: Bypass the failing network call in logout.
-        localStorage.removeItem("alchemist_user");
-        localStorage.removeItem("alchemist_token");
-        set({ user: null, accessToken: null }); 
+      await authApi.deleteAccount();
 
-        return true;
+      // CRITICAL FIX: Bypass the failing network call in logout.
+      localStorage.removeItem("alchemist_user");
+      localStorage.removeItem("alchemist_token");
+      set({ user: null, accessToken: null });
+
+      return true;
     } catch (error) {
-        console.error("Account deletion failed:", error);
-        get().logout(); 
-        throw error;
+      console.error("Account deletion failed:", error);
+      get().logout();
+      throw error;
     }
   },
   // ==========================================
@@ -245,7 +270,7 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     const requestUrl = originalRequest.url || "";
-    
+
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&

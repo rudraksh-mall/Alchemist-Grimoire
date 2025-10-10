@@ -3,7 +3,7 @@ import axios from "axios";
 // 1. Set baseURL to include /v1 and use 'const' for named export compatibility
 const api = axios.create({
   // CRITICAL FIX: Base URL is set to the correct root /api/v1
-  baseURL: "http://localhost:8000/api/v1", 
+  baseURL: "http://localhost:8000/api/v1",
   withCredentials: true,
 });
 
@@ -44,7 +44,7 @@ api.interceptors.response.use(
           { withCredentials: true }
         );
         // NOTE: Access token path confirmed from controller logic
-        const newAccessToken = refreshResponse.data.data.token; 
+        const newAccessToken = refreshResponse.data.data.token;
 
         // Update localStorage
         localStorage.setItem("alchemist_token", newAccessToken);
@@ -70,7 +70,7 @@ api.interceptors.response.use(
 // API Functions: All prefixes are now correct (e.g., /medications instead of /v1/medications)
 export const medicineApi = {
   getAll: async () => {
-    const response = await api.get("/medications"); 
+    const response = await api.get("/medications");
     return response.data.data;
   },
   getById: async (id) => {
@@ -96,8 +96,11 @@ export const doseApi = {
       const response = await api.get("/dose-logs/all");
       return response.data.data;
     } catch (error) {
-      console.error("[Dose API] /dose-logs/all failed (404 expected):", error.message);
-      return []; 
+      console.error(
+        "[Dose API] /dose-logs/all failed (404 expected):",
+        error.message
+      );
+      return [];
     }
   },
   getUpcoming: async () => {
@@ -141,7 +144,7 @@ export const chatApi = {
   },
 };
 
-// --- AUTH API: Implements two-step OTP flow using /users paths and new features ---
+// --- AUTH API: Implements user settings and token flow ---
 export const authApi = {
   register: async (email, password, fullName) => {
     const { data } = await api.post(
@@ -149,29 +152,47 @@ export const authApi = {
       { fullName, email, password },
       { withCredentials: true }
     );
-    return data.data.email; 
+    return data.data.email;
   },
-  
+
   login: async (email, password) => {
     const { data } = await api.post(
-      "/users/login", 
+      "/users/login",
       { email, password },
       { withCredentials: true }
     );
-    return data.data.email; 
+    return data.data.email;
   },
 
   verifyOtp: async (email, otp) => {
     const { data } = await api.post(
-      "/users/verify-otp", 
+      "/users/verify-otp",
       { email, otp },
       { withCredentials: true }
     );
     return {
       user: data.data.user,
-      accessToken: data.data.accessToken, 
+      accessToken: data.data.accessToken,
     };
   },
+
+  // === NEW FEATURE: UPDATE GENERAL USER SETTINGS (Timezone, Reminder Timing, Name) ===
+  updateUserSettings: async ({
+    fullName,
+    email,
+    timezone,
+    reminderTimingMinutes,
+  }) => {
+    // PATCH /v1/users/update-details
+    const response = await api.patch("/users/update-details", {
+      fullName,
+      email,
+      timezone,
+      reminderTimingMinutes: parseInt(reminderTimingMinutes), // Ensure it's a number
+    });
+    return response.data.data; // Returns the updated safe user object
+  },
+  // ==================================================================================
 
   // === NEW FEATURE: UPDATE NOTIFICATIONS ===
   updateNotifications: async (preferences) => {
@@ -195,20 +216,20 @@ export const authApi = {
   deleteAccount: async () => {
     const response = await api.delete("/users/delete-account");
     console.log(response.data);
-    
+
     return response.data;
   },
   // ===================================
 
   disconnectGoogle: async () => {
-    const response = await api.delete("/users/google/disconnect"); 
+    const response = await api.delete("/users/google/disconnect");
     return response.data;
   },
-  
+
   logout: async () => {
     await api.post("/users/logout", {}, { withCredentials: true });
   },
-  
+
   refreshToken: async () => {
     const { data } = await api.post(
       "/users/refresh-token",

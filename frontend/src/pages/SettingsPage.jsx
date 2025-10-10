@@ -41,7 +41,6 @@ import { useTheme } from "../components/ThemeProvider.jsx";
 import { toast } from "sonner";
 
 // --- ACTION REQUIRED: VAPID Public Key ---
-// This key must match the one in your backend's .env file.
 const VAPID_PUBLIC_KEY =
   "BLLw3ROQRrtJUMgLx2CUWjG3UQ5lH0epP_J491eOFAKGFJqPjDfbGSL6sLJKks3sMTtBVWkIJXNwvC26mR1zmek";
 // ------------------------------------------
@@ -62,14 +61,10 @@ const urlBase64ToUint8Array = (base64String) => {
 
 // Helper function to safely initialize state only once
 const getInitialSettings = (user) => ({
-  name: user?.fullName || "",
-  email: user?.email || "",
-  timezone: user?.timezone || "America/New_York",
-  browserNotifications: user?.notificationPreferences?.browser ?? false, // Secure default
-  emailNotifications: user?.notificationPreferences?.email ?? false,
+  // Profile data is initialized in profileFormData state.
+  // This state holds switches/selects not handled by updateNotifications.
   smsNotifications: false,
-  reminderBefore: "15",
-  appleHealth: false,
+  appleHealth: false, // This value needs to be tracked locally until its feature is built
   dataSharing: false,
   analytics: true,
 });
@@ -94,6 +89,9 @@ export function SettingsPage() {
   const saveBrowserSubscription = useAuthStore(
     (state) => state.saveBrowserSubscription
   );
+  const updateUserSettingsAction = useAuthStore(
+    (state) => state.updateUserSettingsAction
+  );
   // --- CRITICAL FIX END ---
 
   const { theme, setTheme } = useTheme();
@@ -108,31 +106,32 @@ export function SettingsPage() {
   const currentBrowserPref = user?.notificationPreferences?.browser ?? false;
   const currentEmailPref = user?.notificationPreferences?.email ?? false;
 
-  const [reminderBefore, setReminderBefore] = useState("15");
-  const [appleHealth, setAppleHealth] = useState(false);
+  // FIX: Separate state for Profile Form (Name, Email, Timezone, Reminder Timing)
+  const [profileFormData, setProfileFormData] = useState({
+    fullName: user?.fullName || "",
+    email: user?.email || "",
+    timezone: user?.timezone || "America/New_York",
+    reminderBefore: String(user?.reminderTimingMinutes || 15), // String value from dropdown
+  });
 
   // Initialize state using the function form, which is safer.
   const [settings, setSettings] = useState(() => getInitialSettings(user));
 
-  // --- FIX 1: Update settings only when the central user object changes ---
+  // --- Update settings only when the central user object changes ---
   useEffect(() => {
+    // This runs after login, updateCurrentUser, etc., ensuring local state reflects user data
     if (user) {
-      // This ensures the local settings (name, email, etc.) are synchronized with the global user state
-      setSettings((prev) => ({
+      setProfileFormData((prev) => ({
         ...prev,
-        name: user.fullName || prev.name,
+        fullName: user.fullName || prev.fullName,
         email: user.email || prev.email,
         timezone: user.timezone || prev.timezone,
-        browserNotifications:
-          user.notificationPreferences?.browser || prev.browserNotifications,
-        emailNotifications:
-          user.notificationPreferences?.email || prev.emailNotifications,
-        googleCalendar: !!user.googleRefreshToken, // Update derived state from user object
+        reminderBefore: String(user.reminderTimingMinutes || 15),
       }));
     }
-  }, [user]);
+  }, [user]); // Only depend on the entire user object
 
-  // --- FIX 2: Handle URL OAuth success/error flag and initial navigation ---
+  // --- Handle URL OAuth success/error flag and initial navigation ---
   useEffect(() => {
     if (!user) {
       navigate("/login");
@@ -162,19 +161,25 @@ export function SettingsPage() {
     }
   }, [user, navigate, updateCurrentUser]);
 
+  // Unified handler for all local state changes (profile, timing, unhandled switches)
   const handleSettingChange = (key, value) => {
-    // This is now only used for unhandled fields like SMS or time selections
-    if (key === "reminderBefore") {
-      setReminderBefore(value);
-    } else if (key === "appleHealth") {
-      setAppleHealth(value);
-    } else if (key === "name" || key === "email" || key === "timezone") {
-      // Handle local profile field changes (will be saved in handleSaveSettings)
+    if (
+      key === "timezone" ||
+      key === "name" ||
+      key === "email" ||
+      key === "reminderBefore"
+    ) {
+      setProfileFormData((prev) => ({
+        ...prev,
+        [key === "name" ? "fullName" : key]: value,
+      }));
+    } else {
+      // General switches: Update the settings state (smsNotifications, appleHealth, etc.)
       setSettings((prev) => ({ ...prev, [key]: value }));
     }
   };
 
-  // === PUSH NOTIFICATION LOGIC ===
+  // === PUSH NOTIFICATION LOGIC (Unchanged) ===
 
   const subscribeUser = async (registration) => {
     // 🎯 CHECK: This is now a runtime check against the key value
@@ -338,11 +343,21 @@ export function SettingsPage() {
   };
 
   const handleSaveSettings = async () => {
+    // CRITICAL: Gather all profile and timing data from the two state sources
+    const dataToSave = {
+      fullName: profileFormData.fullName,
+      email: profileFormData.email,
+      timezone: profileFormData.timezone,
+      reminderTimingMinutes: profileFormData.reminderBefore, // Use the local variable
+    };
+
     setLocalLoading(true);
     try {
-      // ⚠️ Add actual API call here to save settings (name, timezone, etc.)
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      toast.success("Settings saved successfully! ✨");
+      // 1. Call the new store action to update all general user settings
+      // NOTE: This uses the PATCH /update-details route (updateAccountDetails controller)
+      await updateUserSettingsAction(dataToSave);
+
+      toast.success("Profile and timing settings saved successfully! ✨");
     } catch (error) {
       toast.error("Failed to save settings");
     } finally {
@@ -373,6 +388,18 @@ export function SettingsPage() {
       setLocalLoading(false);
     }
   };
+
+  const timezones = [
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles",
+    "Europe/London",
+    "Europe/Paris",
+    "Asia/Tokyo",
+    "Asia/Shanghai",
+    "Australia/Sydney",
+  ];
 
   const reminderOptions = [
     { value: "5", label: "5 minutes" },
@@ -428,8 +455,9 @@ export function SettingsPage() {
                       <Label htmlFor="name">Mystical Name</Label>
                       <Input
                         id="name"
+                        name="name"
                         // Display value comes directly from local state
-                        value={user?.fullName || ""} // Read from user object
+                        value={profileFormData.fullName}
                         onChange={(e) =>
                           handleSettingChange("name", e.target.value)
                         }
@@ -440,15 +468,42 @@ export function SettingsPage() {
                       <Label htmlFor="email">Email</Label>
                       <Input
                         id="email"
+                        name="email"
                         type="email"
                         // Display value comes directly from local state
-                        value={user?.email || ""} // Read from user object
+                        value={profileFormData.email}
                         onChange={(e) =>
                           handleSettingChange("email", e.target.value)
                         }
                         placeholder="your@email.com"
                       />
                     </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="timezone">
+                      <div className="flex items-center space-x-2">
+                        <Clock className="w-4 h-4" />
+                        <span>Timezone</span>
+                      </div>
+                    </Label>
+                    <Select
+                      value={profileFormData.timezone}
+                      onValueChange={(value) =>
+                        handleSettingChange("timezone", value)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {timezones.map((tz) => (
+                          <SelectItem key={tz} value={tz}>
+                            {tz.replace("_", " ")}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </CardContent>
               </Card>
@@ -542,7 +597,7 @@ export function SettingsPage() {
                   <div className="space-y-2">
                     <Label>Reminder Timing</Label>
                     <Select
-                      value={reminderBefore} // Read from local state
+                      value={profileFormData.reminderBefore} // Read from local state
                       onValueChange={(value) =>
                         handleSettingChange("reminderBefore", value)
                       }
@@ -617,6 +672,25 @@ export function SettingsPage() {
                         Connect Calendar
                       </Button>
                     )}
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label htmlFor="apple-health">
+                        Apple Health Integration
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Share data with Apple Health app
+                      </p>
+                    </div>
+                    <Switch
+                      id="apple-health"
+                      checked={settings.appleHealth}
+                      onCheckedChange={(value) =>
+                        handleSettingChange("appleHealth", value)
+                      }
+                      disabled={isLoading}
+                    />
                   </div>
                 </CardContent>
               </Card>

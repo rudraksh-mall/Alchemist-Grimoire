@@ -35,7 +35,7 @@ const userSchema = new Schema(
       default: null,
     },
     // Optional: Flag to remember the user is verified (can be useful for registration flow)
-    isVerified: { 
+    isVerified: {
       type: Boolean,
       default: false,
     },
@@ -45,6 +45,15 @@ const userSchema = new Schema(
       type: String,
       default: "UTC",
     },
+
+    // === NEW FIELD: Custom Reminder Timing ===
+    reminderTimingMinutes: {
+      type: Number,
+      default: 15, // Defaulting to 15 minutes before the dose
+      min: 5,
+      max: 120, // Max of 2 hours, based on frontend options
+    },
+    // =========================================
 
     notificationPreferences: {
       browser: {
@@ -86,7 +95,7 @@ const userSchema = new Schema(
       type: String,
       default: "primary", // Stores the ID of the calendar to sync to
     },
-    
+
     refreshToken: {
       type: String,
     },
