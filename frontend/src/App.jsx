@@ -10,8 +10,6 @@ import useAuthStore from "./hooks/useAuthStore";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
-import { RemindersPage } from "./pages/RemindersPage";
-
 import { DashboardPage } from "./pages/DashboardPage";
 import { ScheduleFormPage } from "./pages/ScheduleFormPage";
 import { ChatPage } from "./pages/ChatPage";
@@ -54,14 +52,7 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="/reminders"
-              element={
-                <ProtectedRoute>
-                  <RemindersPage />
-                </ProtectedRoute>
-              }
-            />
+
             <Route
               path="/schedule/:id"
               element={
