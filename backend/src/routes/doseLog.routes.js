@@ -1,5 +1,3 @@
-// backend/routes/doseLog.routes.js
-
 import { Router } from "express";
 import {
   createDoseLog,
@@ -22,7 +20,6 @@ router.get("/all", getAllDoseLogs);
 router.get("/schedule/:scheduleId", getDoseLogsBySchedule);
 router.get("/today", getTodaysDoseLogs);
 
-// 🎯 ADDED ROUTE FOR ADHERENCE STATISTICS 🎯
 router.get("/stats", getAdherenceStats);
 
 export default router;

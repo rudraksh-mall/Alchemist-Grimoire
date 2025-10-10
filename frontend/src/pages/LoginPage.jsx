@@ -1,34 +1,42 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, Link } from "react-router-dom";
-import { Sparkles, Mail, Lock, Eye, EyeOff, KeyRound, Loader2 } from "lucide-react";
-import useAuthStore from "../hooks/useAuthStore.js"; 
-import { Button } from "../components/ui/button.jsx"; 
-import { Input } from "../components/ui/input.jsx"; 
-import { Label } from "../components/ui/label.jsx"; 
+import {
+  Sparkles,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Loader2,
+} from "lucide-react";
+import useAuthStore from "../hooks/useAuthStore.js";
+import { Button } from "../components/ui/button.jsx";
+import { Input } from "../components/ui/input.jsx";
+import { Label } from "../components/ui/label.jsx";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from "../components/ui/card.jsx"; 
-import { Separator } from "../components/ui/separator.jsx"; 
+} from "../components/ui/card.jsx";
+import { Separator } from "../components/ui/separator.jsx";
 import { toast } from "sonner";
-import { authApi } from '../services/api.js'; 
+import { authApi } from "../services/api.js";
 
 export function LoginPage() {
-  const user = useAuthStore(state => state.user);
-  const storeLoading = useAuthStore(state => state.isLoading);
-  const finalizeLogin = useAuthStore(state => state.finalizeLogin);
-  const googleAuth = useAuthStore(state => state.googleAuth);
+  const user = useAuthStore((state) => state.user);
+  const storeLoading = useAuthStore((state) => state.isLoading);
+  const finalizeLogin = useAuthStore((state) => state.finalizeLogin);
+  const googleAuth = useAuthStore((state) => state.googleAuth);
 
   const navigate = useNavigate();
 
   // --- NEW STATE FOR OTP FLOW ---
-  const [step, setStep] = useState(1); 
-  const [email, setEmail] = useState("demo@alchemist.com");
-  const [password, setPassword] = useState("demo123");
-  const [otp, setOtp] = useState('');
+  const [step, setStep] = useState(1);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [localLoading, setLocalLoading] = useState(false);
   // --- END NEW STATE ---
@@ -40,15 +48,15 @@ export function LoginPage() {
     if (user) {
       navigate("/dashboard");
     }
-  }, [user, navigate]); 
+  }, [user, navigate]);
 
   // --- Step 1: Handle Initial Login (Send OTP) ---
   const handleSendOtp = async (e) => {
     // Check if event object exists before calling preventDefault
-    if (e && typeof e.preventDefault === 'function') {
+    if (e && typeof e.preventDefault === "function") {
       e.preventDefault();
     }
-    
+
     // CRITICAL: Prevent resend if the main fields are empty.
     if (!email || !password) {
       toast.error("Please enter both email and password.");
@@ -58,16 +66,18 @@ export function LoginPage() {
     setLocalLoading(true);
     try {
       // 🎯 FIX 1: Use authApi.login (which calls /users/login)
-      const sentEmail = await authApi.login(email, password); 
-      
+      const sentEmail = await authApi.login(email, password);
+
       // 2. Success: Move to the verification step
       toast.info(`The Circus Crier has dispatched a code to ${sentEmail}!`);
       setStep(2);
     } catch (error) {
       // Use general error handling since backend is now responsible for precise status codes
-      const errorMessage = error.response?.data?.message || "Login failed. Invalid credentials or server error.";
+      const errorMessage =
+        error.response?.data?.message ||
+        "Login failed. Invalid credentials or server error.";
       toast.error(errorMessage);
-      setStep(1); 
+      setStep(1);
     } finally {
       setLocalLoading(false);
     }
@@ -77,25 +87,29 @@ export function LoginPage() {
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
     if (!email || !otp) return;
-    
+
     setLocalLoading(true);
     try {
       // 🎯 FIX 2: Use authApi.verifyOtp (which calls /users/verify-otp)
-      const { user: loggedInUser, accessToken } = await authApi.verifyOtp(email, otp);
-      
+      const { user: loggedInUser, accessToken } = await authApi.verifyOtp(
+        email,
+        otp
+      );
+
       // 2. Success: Manually update the global auth store state using the action we aliased
-      finalizeLogin(loggedInUser, accessToken); 
+      finalizeLogin(loggedInUser, accessToken);
 
       toast.success("OTP verified! Welcome back, mystical alchemist!");
       // Navigation is handled by the useEffect hook
     } catch (error) {
-      const errorMessage = error.response?.data?.message || "OTP verification failed. Check your code or request a new one.";
+      const errorMessage =
+        error.response?.data?.message ||
+        "OTP verification failed. Check your code or request a new one.";
       toast.error(errorMessage);
     } finally {
       setLocalLoading(false);
     }
   };
-
 
   const handleGoogleAuth = async () => {
     setLocalLoading(true);
@@ -109,7 +123,7 @@ export function LoginPage() {
   };
 
   const handleBack = () => {
-    setOtp(''); 
+    setOtp("");
     setStep(1);
   };
 
@@ -140,7 +154,7 @@ export function LoginPage() {
             repeat: Infinity,
             ease: "easeInOut",
           }}
-        /> 
+        />
       </div>
 
       <motion.div
@@ -162,20 +176,23 @@ export function LoginPage() {
 
             <div>
               <CardTitle className="text-2xl font-cinzel text-card-foreground">
-                {step === 1 ? "Alchemist's Grand Grimoire" : "Circus Crier Code"}
+                {step === 1
+                  ? "Alchemist's Grand Grimoire"
+                  : "Circus Crier Code"}
               </CardTitle>
               <p className="text-muted-foreground mt-2">
-                {step === 1 
-                  ? "Enter the mystical realm of wellness" 
-                  : `Enter the code sent to ${email} to proceed.`
-                }
+                {step === 1
+                  ? "Enter the mystical realm of wellness"
+                  : `Enter the code sent to ${email} to proceed.`}
               </p>
             </div>
           </CardHeader>
 
           <CardContent className="space-y-6">
-            <form onSubmit={step === 1 ? handleSendOtp : handleVerifyOtp} className="space-y-4">
-              
+            <form
+              onSubmit={step === 1 ? handleSendOtp : handleVerifyOtp}
+              className="space-y-4"
+            >
               {/* --- STEP 1: Email and Password Input --- */}
               {step === 1 && (
                 <>
@@ -264,14 +281,14 @@ export function LoginPage() {
                       />
                     </div>
                     <Button
-                        type="button"
-                        variant="link"
-                        // Call handleSendOtp without event, relying on the check inside the handler
-                        onClick={() => handleSendOtp()} 
-                        disabled={isLoading}
-                        className="p-0 h-4 text-xs text-yellow-400 hover:text-yellow-300"
+                      type="button"
+                      variant="link"
+                      // Call handleSendOtp without event, relying on the check inside the handler
+                      onClick={() => handleSendOtp()}
+                      disabled={isLoading}
+                      className="p-0 h-4 text-xs text-yellow-400 hover:text-yellow-300"
                     >
-                        Resend Code
+                      Resend Code
                     </Button>
                   </div>
 
@@ -281,12 +298,12 @@ export function LoginPage() {
                     disabled={isLoading}
                   >
                     {isLoading ? (
-                       <Loader2 className="w-4 h-4 animate-spin" />
+                      <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       "Enter the Grimoire (Verify)"
                     )}
                   </Button>
-                  
+
                   <Button
                     type="button"
                     variant="outline"
@@ -344,12 +361,6 @@ export function LoginPage() {
                 >
                   Create your grimoire
                 </Link>
-              </p>
-            </div>
-
-            <div className="text-center">
-              <p className="text-xs text-muted-foreground">
-                Demo credentials: demo@alchemist.com / demo123
               </p>
             </div>
           </CardContent>

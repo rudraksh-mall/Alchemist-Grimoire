@@ -10,12 +10,11 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 
-// REVISED: createMedicationSchedule (WITH DOSE CREATION INTEGRATION)
 const createMedicationSchedule = asyncHandler(async (req, res) => {
   const { name, dosage, frequency, times, startDate, endDate, notes } =
     req.body;
 
-  // --- 1. Validation ---
+  // Validation
   if (
     !name ||
     !dosage ||
@@ -30,7 +29,7 @@ const createMedicationSchedule = asyncHandler(async (req, res) => {
     );
   }
 
-  // --- 2. Create Schedule in MongoDB ---
+  // Create Schedule in MongoDB
   const schedule = await MedicationSchedule.create({
     name,
     dosage,
@@ -42,10 +41,10 @@ const createMedicationSchedule = asyncHandler(async (req, res) => {
     userId: req.user._id,
   });
 
-  // --- 3. Create Initial Dose Logs ---
+  // Create Initial Dose Logs
   await createInitialDoses(schedule);
 
-  // --- 4. GOOGLE CALENDAR SYNC (Showstopper Feature) ---
+  // GOOGLE CALENDAR SYNC
 
   // Fetch the user's Google Refresh Token and Timezone (needed for event creation)
   const user = await User.findById(req.user._id).select(
@@ -60,7 +59,7 @@ const createMedicationSchedule = asyncHandler(async (req, res) => {
         user.googleRefreshToken
       );
 
-      // Optional: Save the Google Event ID back to the schedule in MongoDB
+      // Save the Google Event ID back to the schedule in MongoDB
       await MedicationSchedule.findByIdAndUpdate(schedule._id, {
         googleEventId: eventId,
       });
@@ -77,7 +76,7 @@ const createMedicationSchedule = asyncHandler(async (req, res) => {
     }
   }
 
-  // --- 5. Final Response ---
+  // Final Response
   return res
     .status(201)
     .json(
@@ -143,7 +142,7 @@ const updateMedicationSchedule = asyncHandler(async (req, res) => {
 
 // Delete a medication schedule by ID
 const deleteMedicationSchedule = asyncHandler(async (req, res) => {
-  const { scheduleId } = req.params; // 1. Find the schedule BEFORE deletion to get the Google Event ID
+  const { scheduleId } = req.params; // Find the schedule BEFORE deletion to get the Google Event ID
   const schedule = await MedicationSchedule.findOne({
     _id: scheduleId,
     userId: req.user._id,
@@ -153,7 +152,7 @@ const deleteMedicationSchedule = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Medication schedule not found");
   }
 
-  // --- 2. GOOGLE CALENDAR SYNC DELETION ---
+  // GOOGLE CALENDAR SYNC DELETION
   // Check if a Google Event ID exists on the schedule
   if (schedule.googleEventId) {
     // Fetch the user's refresh token needed for the deletion service
@@ -174,11 +173,10 @@ const deleteMedicationSchedule = asyncHandler(async (req, res) => {
         );
       }
     }
-  } // 3. Delete from MongoDB
-  // We use findOneAndDelete outside of the initial query since we already did a findOne to get the eventId
-  // ----------------------------------------
-
-  await MedicationSchedule.deleteOne({ _id: scheduleId, userId: req.user._id }); // 4. Delete associated dose logs
+  }
+  // Delete from MongoDB
+  await MedicationSchedule.deleteOne({ _id: scheduleId, userId: req.user._id });
+  // Delete associated dose logs
 
   await DoseLog.deleteMany({ scheduleId: scheduleId });
   return res

@@ -554,34 +554,6 @@ export function SettingsPage() {
                       />
                                          {" "}
                     </div>
-                                       {" "}
-                    <div className="flex items-center justify-between">
-                                           {" "}
-                      <div>
-                                               {" "}
-                        <Label htmlFor="sms-notifications">
-                                                    SMS Notifications          
-                                       {" "}
-                        </Label>
-                                               {" "}
-                        <p className="text-sm text-muted-foreground">
-                                                    Receive text message alerts
-                                                 {" "}
-                        </p>
-                                             {" "}
-                      </div>
-                                           {" "}
-                      <Switch
-                        id="sms-notifications"
-                        checked={settings.smsNotifications}
-                        onCheckedChange={(value) =>
-                          handleSettingChange("smsNotifications", value)
-                        }
-                        disabled={isLoading}
-                      />
-                                         {" "}
-                    </div>
-                                     {" "}
                   </div>
                                     <Separator />                 {" "}
                   <div className="space-y-2">

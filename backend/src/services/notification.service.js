@@ -3,19 +3,13 @@ import { sendEmail } from "./email.service.js";
 import { User } from "../models/user.model.js";
 import webpush from "web-push";
 
-// --- VAPID Setup (Configure Web Push) ---
+// VAPID Setup (Configure Web Push)
 webpush.setVapidDetails(
   process.env.VAPID_SUBJECT || "mailto:admin@alchemist-arena.com", // Sender contact
   process.env.VAPID_PUBLIC_KEY,
   process.env.VAPID_PRIVATE_KEY
 );
-// ----------------------------------------
 
-/**
- * Sends a push notification payload to the user's browser subscription.
- * @param {object} subscription - The user's PushSubscription object.
- * @param {object} payload - The data payload to send.
- */
 const sendBrowserPush = async (subscription, payload) => {
   try {
     const payloadString = JSON.stringify(payload);
@@ -27,18 +21,16 @@ const sendBrowserPush = async (subscription, payload) => {
       error.statusCode || error.message
     );
 
-    // CRITICAL: If status is 410 Gone, the subscription is expired/invalid.
     if (error.statusCode === 410) {
       console.warn(
         `[Notification Service] Deleting expired subscription for endpoint: ${subscription.endpoint}`
       );
-      // In a real application, you would clean up the DB here.
     }
   }
 };
 
 export const checkAndSendReminders = async () => {
-  // 1. Define the maximum time window (Max 2 hours or 120 minutes, based on UI options)
+  // Define the maximum time window (Max 2 hours or 120 minutes, based on UI options)
   const MAX_WINDOW_MINUTES = 120; // This defines the maximum fetch horizon
   const now = new Date();
 
@@ -47,17 +39,16 @@ export const checkAndSendReminders = async () => {
     now.getTime() + MAX_WINDOW_MINUTES * 60000
   );
 
-  // NOTE: This log is now broad to cover all potential reminders
+  // This log is now broad to cover all potential reminders
   console.log(
     `[Notification Service] Fetching doses scheduled between ${now.toLocaleTimeString()} and ${maxReminderWindowEnd.toLocaleTimeString()} (Max ${MAX_WINDOW_MINUTES} min horizon)`
   );
 
-  // 2. Find pending doses in that window, populating necessary user fields
+  // Find pending doses in that window, populating necessary user fields
   const upcomingDoses = await DoseLog.find({
     status: "pending",
     scheduledFor: { $gte: now, $lte: maxReminderWindowEnd },
   })
-    // CRITICAL FIX 1: Populate the User to get all necessary fields, including browserSubscription and the new reminderTimingMinutes
     .populate({
       path: "userId",
       model: "User",
@@ -86,7 +77,7 @@ export const checkAndSendReminders = async () => {
       return acc;
     }
 
-    // --- CRITICAL FIX 2: Dynamic Reminder Window Check ---
+    // Dynamic Reminder Window Check
     const userReminderTime = dose.userId.reminderTimingMinutes || 15; // Default to 15 minutes if field is missing/null
 
     // The dose is due *userReminderTime* minutes from now.
@@ -117,7 +108,7 @@ export const checkAndSendReminders = async () => {
     return acc;
   }, {});
 
-  // 3. Send notifications (Email and Browser Push)
+  // Send notifications (Email and Browser Push)
   for (const userId in remindersByUser) {
     const { user, doses, reminderTiming } = remindersByUser[userId];
 
@@ -149,7 +140,7 @@ export const checkAndSendReminders = async () => {
       };
     });
 
-    // --- A. Handle EMAIL Notification (If preference is ON) ---
+    // Handle EMAIL Notification (If preference is ON)
     if (user.notificationPreferences.email === true) {
       const userName = user.fullName?.split(" ")[0] || "Alchemist";
 
@@ -213,7 +204,7 @@ export const checkAndSendReminders = async () => {
       );
     }
 
-    // --- B. Handle BROWSER PUSH Notification (If preference is ON and subscribed) ---
+    //  Handle BROWSER PUSH Notification (If preference is ON and subscribed)
     if (
       user.notificationPreferences.browser === true &&
       user.browserSubscription

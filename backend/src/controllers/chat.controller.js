@@ -1,5 +1,3 @@
-// backend/src/controllers/chat.controller.js (Final Stable Version)
-
 import { GoogleGenAI } from "@google/genai";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
@@ -13,11 +11,10 @@ const sendMessage = asyncHandler(async (req, res) => {
   const { message } = req.body;
   const userId = req.user._id;
 
-  // --- ENHANCEMENT: Get User's Name from the JWT Payload (req.user) ---
   // Assuming your authentication middleware attaches user details like fullName
   const userFullName = req.user.fullName || "Esteemed Alchemist";
 
-  if (!message) throw new ApiError(400, "Message content is required."); //  1. DATA RETRIEVAL
+  if (!message) throw new ApiError(400, "Message content is required."); //  DATA RETRIEVAL
 
   const schedules = await MedicationSchedule.find({ userId }).select(
     "name dosage frequency times startDate"
@@ -33,7 +30,7 @@ const sendMessage = asyncHandler(async (req, res) => {
     activeSchedules: schedules,
     recentDoseHistory: recentLogs,
     currentDate: new Date().toISOString(),
-  }; //  2. PROMPT CONSTRUCTION
+  }; // PROMPT CONSTRUCTION
 
   const systemInstruction =
     "You are the 'Mystic Fortune Teller,' a wise, helpful, and supportive health assistant dedicated to the user. Your primary role is to analyze the user's provided medication schedules and dose history (Grimoire data) to answer their natural language questions clearly and concisely. Your tone must be encouraging and knowledgeable, framing your response with the app's mystical theme (e.g., using elixirs, potions, Grimoire). Do not engage in fortune-telling or provide generic medical advice outside of the supplied data.";
@@ -53,7 +50,7 @@ Task: Answer the user's question.
 1. If the question relates to the user's schedule, dosage, or missed doses (like "What do I take now?"), use the Grimoire Data ONLY, referring to the user by their name (${userFullName}).
 2. If the question is general health, safety, or wellness-related (like "Is Tylenol safe to take with my medicine?"), use your general knowledge and Google Search tool to provide a factual answer.
 3. Maintain the Mystic Fortune Teller persona in the final response.
-`; // --- 3. AI GENERATION ---
+`; //  AI GENERATION
 
   try {
     const response = await ai.models.generateContent({
@@ -61,8 +58,6 @@ Task: Answer the user's question.
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       config: {
         systemInstruction: systemInstruction,
-        // Since the prompt instructs the model to use general knowledge for external queries,
-        // we should ensure grounding is enabled to keep those general answers factual.
         tools: [{ google_search: {} }],
       },
     });

@@ -4,9 +4,7 @@ import cookieParser from "cookie-parser";
 
 const app = express();
 
-// --- CRITICAL FIX 1: Trust proxy headers for secure cookie handling ---
 app.set('trust proxy', 1); 
-// --------------------------------------------------------------------
 
 app.use(
   cors({

@@ -28,7 +28,7 @@ const doseLogSchema = new Schema(
     },
 
     actionedAt: {
-      type: Date, // Remove default value. The field is null until marked 'taken'.
+      type: Date,
       validate: {
         validator: function (v) {
           // Only validate if status is 'taken' AND value 'v' exists
@@ -39,7 +39,7 @@ const doseLogSchema = new Schema(
     },
 
     notes: {
-      type: String, // reason for missing
+      type: String,
     },
 
     isLate: {

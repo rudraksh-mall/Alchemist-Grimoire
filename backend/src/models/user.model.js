@@ -25,7 +25,6 @@ const userSchema = new Schema(
       required: [true, "Password is required"],
     },
 
-    // --- NEW FIELDS FOR OTP VERIFICATION ---
     emailVerificationToken: {
       type: String, // Stores the hashed OTP
       default: null,
@@ -34,7 +33,7 @@ const userSchema = new Schema(
       type: Date, // Stores the time the OTP expires
       default: null,
     },
-    // Optional: Flag to remember the user is verified (can be useful for registration flow)
+    // Flag to remember the user is verified (can be useful for registration flow)
     isVerified: {
       type: Boolean,
       default: false,
@@ -46,14 +45,12 @@ const userSchema = new Schema(
       default: "UTC",
     },
 
-    // === NEW FIELD: Custom Reminder Timing ===
     reminderTimingMinutes: {
       type: Number,
       default: 15, // Defaulting to 15 minutes before the dose
       min: 5,
       max: 120, // Max of 2 hours, based on frontend options
     },
-    // =========================================
 
     notificationPreferences: {
       browser: {
@@ -64,10 +61,8 @@ const userSchema = new Schema(
         type: Boolean,
         default: true,
       },
-      // sms: { type: Boolean, default: true } // Can be added later if needed
     },
 
-    // --- NEW FIELD: Browser Push Subscription ---
     browserSubscription: {
       type: {
         // The unique push endpoint provided by the browser (required for Web Push)
@@ -84,7 +79,6 @@ const userSchema = new Schema(
       // Use null to explicitly indicate that the user has not subscribed or has unsubscribed
       default: null,
     },
-    // --- END NEW FIELD ---
 
     googleRefreshToken: {
       type: String,

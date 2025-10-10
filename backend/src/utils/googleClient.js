@@ -1,5 +1,3 @@
-// backend/src/utils/googleClient.js (New File)
-
 import { google } from "googleapis";
 
 // Re-export the necessary module constants

@@ -1,20 +1,13 @@
-// backend/src/services/calendar.service.js
-
 import { calendar as calendarModule } from "../utils/googleClient.js";
 import { oauth2Client } from "../utils/googleAuth.js";
 
 const calendar = calendarModule({ version: "v3", auth: oauth2Client });
 
-/**
- * Creates a recurring event in the user's Google Calendar.
- * @param {object} schedule - The MedicationSchedule document from MongoDB (populated with user timezone).
- * @param {string} refreshToken - The user's stored Google Refresh Token.
- */
 export const createCalendarEvent = async (schedule, refreshToken) => {
-  // 1. Set the credentials for the specific user using their stored Refresh Token
+  //  Set the credentials for the specific user using their stored Refresh Token
   oauth2Client.setCredentials({ refresh_token: refreshToken });
 
-  // 2. Define recurrence rule (RRULE) based on schedule frequency and end date
+  //  Define recurrence rule (RRULE) based on schedule frequency and end date
   const frequencyMap = {
     "once daily": "DAILY",
     "twice daily": "DAILY",
@@ -25,7 +18,6 @@ export const createCalendarEvent = async (schedule, refreshToken) => {
 
   let recurrenceRule = `RRULE:FREQ=${frequencyMap[schedule.frequency] || "DAILY"}`;
 
-  // 🎯 FIX: Add UNTIL clause if endDate exists
   if (schedule.endDate) {
     const endDateObj = new Date(schedule.endDate);
 
@@ -40,7 +32,7 @@ export const createCalendarEvent = async (schedule, refreshToken) => {
     recurrenceRule += `;UNTIL=${untilDate}`;
   }
 
-  // 3. Construct the event object
+  //  Construct the event object
   // We use the first scheduled time/date as the base for the recurring event
   const startTime = schedule.times[0] || "09:00";
   // The schedule.startDate from the FE is already YYYY-MM-DD
@@ -66,7 +58,7 @@ export const createCalendarEvent = async (schedule, refreshToken) => {
     colorId: 9, // A pleasant purple/grape color for events
   };
 
-  // 4. Insert the event into the user's primary calendar
+  //  Insert the event into the user's primary calendar
   const response = await calendar.events.insert({
     calendarId: "primary", // Default to primary calendar
     resource: event,
@@ -77,21 +69,12 @@ export const createCalendarEvent = async (schedule, refreshToken) => {
   return response.data.id;
 };
 
-// ... existing createCalendarEvent function ...
-
-// 🌟 NEW FUNCTION: Deletes a Google Calendar event 🌟
-/**
- * Deletes a calendar event using the stored Event ID and the user's Refresh Token.
- * @param {string} googleEventId - The ID of the event in Google Calendar.
- * @param {string} refreshToken - The user's stored Google Refresh Token.
- * @param {string} [calendarId='primary'] - The ID of the calendar (defaults to primary).
- */
 export const deleteCalendarEvent = async (
   googleEventId,
   refreshToken,
   calendarId = "primary"
 ) => {
-  // 1. Set the credentials for the specific user
+  // Set the credentials for the specific user
   oauth2Client.setCredentials({ refresh_token: refreshToken });
 
   try {
@@ -105,8 +88,6 @@ export const deleteCalendarEvent = async (
     );
     return true;
   } catch (error) {
-    // Log the error but DO NOT crash the server (non-critical feature failure)
-    // Note: Google returns 404 if the event was already deleted or not found.
     if (error.code === 404) {
       console.warn(
         `[Google Sync WARNING] Event ID ${googleEventId} not found in Google Calendar. Skipping deletion.`
@@ -121,5 +102,3 @@ export const deleteCalendarEvent = async (
   }
 };
 
-// Update the exports list at the end of the file:
-// export { createCalendarEvent, deleteCalendarEvent };
