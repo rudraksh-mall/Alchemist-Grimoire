@@ -19,6 +19,7 @@ import {
 import { Skeleton } from "../components/ui/skeleton";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { SnoozeDoseDialog } from "../components/SnoozeDoseDialog"; // Adjust path as needed
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -40,7 +41,8 @@ export function DashboardPage() {
   } = useDoseStore();
   const [adherenceStats, setAdherenceStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
-
+  const [isSnoozeDialogOpen, setIsSnoozeDialogOpen] = useState(false);
+  const [snoozeTargetDoseId, setSnoozeTargetDoseId] = useState(null);
   // 🎯 FIX 1: Define fetchStats outside useEffect so it can be reused
   const fetchStats = async () => {
     setStatsLoading(true);
@@ -53,7 +55,7 @@ export function DashboardPage() {
       setStatsLoading(false);
     }
   };
-  
+
   // Fetch initial data on mount
   useEffect(() => {
     fetchMedicines();
@@ -86,22 +88,34 @@ export function DashboardPage() {
     }
   };
 
+  const handleOpenSnoozeDialog = (id) => {
+    // Verify 'id' is a valid value here before setting state
+    if (!id) {
+      toast.error("Error: Dose information is incomplete.");
+      return;
+    }
+    setSnoozeTargetDoseId(id); // Should set the ID from DoseCard
+    setIsSnoozeDialogOpen(true);
+  };
+
   // 🎯 NEW: Handler for snoozing a dose (e.g., for 30 minutes)
-  const handleSnoozeDose = async (id) => {
+  const handleSnoozeDoseConfirmed = async (id, durationInMinutes) => {
+    setIsSnoozeDialogOpen(false); // Close the dialog immediately
+    setSnoozeTargetDoseId(null);
     try {
-      // You can implement a modal here to ask for duration, 
-      // but for simplicity, we default to 30 minutes.
-      await snoozeDose(id, 30); 
-      toast.info("Dose snoozed! We'll remind you in 30 minutes.");
-      
-      fetchDoses(); // Refresh the upcoming doses list immediately (it should disappear/re-appear later)
-      fetchStats(); // Stats won't change, but it's safe to refresh
+      // 🎯 KEY CHANGE: Use the dynamic duration
+      await snoozeDose(id, durationInMinutes);
+      toast.info(
+        `Dose snoozed! We'll remind you in ${durationInMinutes} minutes.`
+      );
+
+      fetchDoses(); // Refresh the upcoming doses list
+      // fetchStats(); // Stats won't change, but safe to refresh
     } catch (error) {
       toast.error("Failed to snooze dose.");
       console.error("Snooze failed:", error);
     }
   };
-
   const handleAddMedicine = () => {
     navigate("/schedule/new");
   };
@@ -114,23 +128,25 @@ export function DashboardPage() {
   // 🎯 NEW: Handler for deleting a medicine
   const handleDeleteMedicine = async (medicineId) => {
     // ⚠️ NOTE: window.confirm is bad practice. Replace with a custom modal in production.
-    if (window.confirm("Are you sure you want to banish this potion from your grimoire? This action cannot be undone.")) {
+    if (
+      window.confirm(
+        "Are you sure you want to banish this potion from your grimoire? This action cannot be undone."
+      )
+    ) {
       try {
         await deleteMedicine(medicineId);
         toast.success("Potion successfully banished!🧹");
-        
+
         // Refresh dependent data
         fetchMedicines(); // Reloads the Active Potions list
-        fetchDoses();     // Update upcoming doses
-        fetchStats();     // Update adherence stats
-        
+        fetchDoses(); // Update upcoming doses
+        fetchStats(); // Update adherence stats
       } catch (error) {
         toast.error("Failed to banish potion.");
         console.error("Deletion failed:", error);
       }
     }
   };
-
 
   return (
     <div className="flex h-screen bg-background">
@@ -296,8 +312,8 @@ export function DashboardPage() {
                           key={dose.id}
                           dose={dose}
                           onTake={handleTakeDose}
-                          onSkip={handleSkipDose}
-                          onSnooze={handleSnoozeDose} // 🎯 NEW: Pass the snooze handler
+                          onSkip={handleSkipDose} // 🛑 FIX HERE: Must pass the OPENER, not the CONFIRMER
+                          onSnooze={handleOpenSnoozeDialog}
                         />
                       ))
                     ) : (
@@ -371,6 +387,12 @@ export function DashboardPage() {
           </div>
         </div>
       </div>
+      <SnoozeDoseDialog
+        isOpen={isSnoozeDialogOpen}
+        doseId={snoozeTargetDoseId}
+        onClose={() => setIsSnoozeDialogOpen(false)}
+        onSnoozeConfirmed={handleSnoozeDoseConfirmed}
+      />
     </div>
   );
 }
