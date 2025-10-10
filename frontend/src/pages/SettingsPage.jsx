@@ -72,9 +72,8 @@ const getInitialSettings = (user) => ({
 export function SettingsPage() {
   // --- CRITICAL FIX START: Use separate, stable selectors ---
   const user = useAuthStore((state) => state.user);
-  const storeLoading = useAuthStore((state) => state.isLoading);
+  const storeLoading = useAuthStore((state) => state.isLoading); // Action functions (stable references)
 
-  // Action functions (stable references)
   const logout = useAuthStore((state) => state.logout);
   const updateCurrentUser = useAuthStore((state) => state.updateCurrentUser);
   const disconnectGoogleAuth = useAuthStore(
@@ -91,33 +90,27 @@ export function SettingsPage() {
   );
   const updateUserSettingsAction = useAuthStore(
     (state) => state.updateUserSettingsAction
-  );
-  // --- CRITICAL FIX END ---
-
+  ); // --- CRITICAL FIX END ---
   const { theme, setTheme } = useTheme();
 
   const [localLoading, setLocalLoading] = useState(false);
   const isLoading = storeLoading || localLoading;
 
-  const navigate = useNavigate();
+  const navigate = useNavigate(); // Derived Values (Accessed directly from user)
 
-  // Derived Values (Accessed directly from user)
   const isGoogleConnected = !!user?.googleRefreshToken;
   const currentBrowserPref = user?.notificationPreferences?.browser ?? false;
-  const currentEmailPref = user?.notificationPreferences?.email ?? false;
+  const currentEmailPref = user?.notificationPreferences?.email ?? false; // FIX: Separate state for Profile Form (Name, Email, Timezone, Reminder Timing)
 
-  // FIX: Separate state for Profile Form (Name, Email, Timezone, Reminder Timing)
   const [profileFormData, setProfileFormData] = useState({
     fullName: user?.fullName || "",
     email: user?.email || "",
     timezone: user?.timezone || "America/New_York",
     reminderBefore: String(user?.reminderTimingMinutes || 15), // String value from dropdown
-  });
+  }); // Initialize state using the function form, which is safer.
 
-  // Initialize state using the function form, which is safer.
-  const [settings, setSettings] = useState(() => getInitialSettings(user));
+  const [settings, setSettings] = useState(() => getInitialSettings(user)); // --- Update settings only when the central user object changes ---
 
-  // --- Update settings only when the central user object changes ---
   useEffect(() => {
     // This runs after login, updateCurrentUser, etc., ensuring local state reflects user data
     if (user) {
@@ -129,9 +122,8 @@ export function SettingsPage() {
         reminderBefore: String(user.reminderTimingMinutes || 15),
       }));
     }
-  }, [user]); // Only depend on the entire user object
+  }, [user]); // Only depend on the entire user object // --- Handle URL OAuth success/error flag and initial navigation ---
 
-  // --- Handle URL OAuth success/error flag and initial navigation ---
   useEffect(() => {
     if (!user) {
       navigate("/login");
@@ -159,14 +151,13 @@ export function SettingsPage() {
 
       navigate("/settings", { replace: true });
     }
-  }, [user, navigate, updateCurrentUser]);
+  }, [user, navigate, updateCurrentUser]); // Unified handler for all local state changes (profile, timing, unhandled switches)
 
-  // Unified handler for all local state changes (profile, timing, unhandled switches)
   const handleSettingChange = (key, value) => {
     if (
       key === "timezone" ||
       key === "name" ||
-      key === "email" ||
+      key === "email" || // Although disabled below, this logic remains for consistency
       key === "reminderBefore"
     ) {
       setProfileFormData((prev) => ({
@@ -177,9 +168,7 @@ export function SettingsPage() {
       // General switches: Update the settings state (smsNotifications, appleHealth, etc.)
       setSettings((prev) => ({ ...prev, [key]: value }));
     }
-  };
-
-  // === PUSH NOTIFICATION LOGIC (Unchanged) ===
+  }; // === PUSH NOTIFICATION LOGIC (Unchanged) ===
 
   const subscribeUser = async (registration) => {
     // 🎯 CHECK: This is now a runtime check against the key value
@@ -192,15 +181,13 @@ export function SettingsPage() {
     }
 
     try {
-      const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+      const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY); // Subscribe the service worker to the push service
 
-      // Subscribe the service worker to the push service
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: applicationServerKey,
-      });
+      }); // Send the subscription object to the backend for storage
 
-      // Send the subscription object to the backend for storage
       await saveBrowserSubscription(subscription);
 
       toast.success("Browser notifications enabled!");
@@ -219,9 +206,8 @@ export function SettingsPage() {
       if (subscription) {
         // Unsubscribe from the browser's push service
         await subscription.unsubscribe();
-      }
+      } // Send a null subscription to the backend to clear the record
 
-      // Send a null subscription to the backend to clear the record
       await saveBrowserSubscription(null);
       toast.info("Browser notifications disabled.");
       return true;
@@ -253,9 +239,8 @@ export function SettingsPage() {
         // Register service worker if not already registered
         const registration =
           (await navigator.serviceWorker.getRegistration("/")) ||
-          (await navigator.serviceWorker.register("/service-worker.js"));
+          (await navigator.serviceWorker.register("/service-worker.js")); // CRITICAL FIX: Force unsubscribe old key before subscribing new one to avoid 410 errors
 
-        // CRITICAL FIX: Force unsubscribe old key before subscribing new one to avoid 410 errors
         const currentSubscription =
           await registration.pushManager.getSubscription();
         if (currentSubscription) {
@@ -263,9 +248,8 @@ export function SettingsPage() {
         }
 
         success = await subscribeUser(registration);
-      }
+      } // If subscription succeeds, update DB preference flag
 
-      // If subscription succeeds, update DB preference flag
       await saveNotificationPreferences(success, currentEmailPref);
     } else {
       // --- Unsubscription Logic (Turning OFF) ---
@@ -275,21 +259,17 @@ export function SettingsPage() {
       } else {
         // If no registration exists, treat as successful local cleanup
         success = true;
-      }
-      // Always update preference flag to false if we attempted to turn it off
+      } // Always update preference flag to false if we attempted to turn it off
       await saveNotificationPreferences(false, currentEmailPref);
-    }
+    } // If operation failed, we must revert the UI state
 
-    // If operation failed, we must revert the UI state
     if (!success) {
       setSettings((prev) => ({ ...prev, browserNotifications: !value }));
     }
 
     setLocalLoading(false);
     return success;
-  };
-  // ===================================
-
+  }; // ===================================
   const handleUpdateNotifications = async (key, value) => {
     // Note: Local loading is handled inside handleBrowserNotificationToggle for accuracy
     if (key === "browserNotifications") {
@@ -301,29 +281,24 @@ export function SettingsPage() {
         await saveNotificationPreferences(currentBrowserPref, value);
         toast.success("Email preference updated.");
       } catch (error) {
-        toast.error("Failed to update email preference.");
-        // Revert the toggle on failure
+        toast.error("Failed to update email preference."); // Revert the toggle on failure
         setSettings((prev) => ({ ...prev, emailNotifications: !value }));
       } finally {
         setLocalLoading(false);
       }
     }
-  };
-  // =======================================================================
-
+  }; // =======================================================================
   const handleConnectGoogle = () => {
     const userId = user?._id;
 
     if (!userId) {
       toast.error("Please log in again to connect your calendar.");
       return;
-    }
+    } // Redirect to backend endpoint for OAuth login flow
 
-    // Redirect to backend endpoint for OAuth login flow
     window.location.href = `http://localhost:8000/api/v1/users/google/login?userId=${userId}`;
-  };
+  }; // 🎯 FINAL IMPLEMENTATION: Handle disconnection
 
-  // 🎯 FINAL IMPLEMENTATION: Handle disconnection
   const handleDisconnectGoogle = async () => {
     if (
       !window.confirm("Are you sure you want to disconnect Google Calendar?")
@@ -345,7 +320,7 @@ export function SettingsPage() {
   const handleSaveSettings = async () => {
     // CRITICAL: Gather all profile and timing data from the two state sources
     const dataToSave = {
-      fullName: profileFormData.fullName,
+      fullName: profileFormData.fullName, // The email field is now disabled/readOnly in the JSX, so we rely on the // current value in profileFormData for saving, or just exclude it if not needed.
       email: profileFormData.email,
       timezone: profileFormData.timezone,
       reminderTimingMinutes: profileFormData.reminderBefore, // Use the local variable
@@ -363,9 +338,8 @@ export function SettingsPage() {
     } finally {
       setLocalLoading(false);
     }
-  };
+  }; // 🎯 DELETE ACCOUNT FUNCTIONALITY
 
-  // 🎯 DELETE ACCOUNT FUNCTIONALITY
   const handleDeleteAccount = async () => {
     const isConfirmed = window.confirm(
       "Are you absolutely sure you want to delete your account? All schedules and logs will be permanently removed."
@@ -389,18 +363,6 @@ export function SettingsPage() {
     }
   };
 
-  const timezones = [
-    "America/New_York",
-    "America/Chicago",
-    "America/Denver",
-    "America/Los_Angeles",
-    "Europe/London",
-    "Europe/Paris",
-    "Asia/Tokyo",
-    "Asia/Shanghai",
-    "Australia/Sydney",
-  ];
-
   const reminderOptions = [
     { value: "5", label: "5 minutes" },
     { value: "15", label: "15 minutes" },
@@ -411,131 +373,144 @@ export function SettingsPage() {
 
   return (
     <div className="flex h-screen bg-background">
-      <Sidebar />
-
+            <Sidebar />     {" "}
       <div className="flex-1 flex flex-col overflow-hidden">
+               {" "}
         <header className="border-b border-border bg-card/50 backdrop-blur-sm p-6">
+                   {" "}
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
           >
+                       {" "}
             <div className="flex items-center space-x-3 mb-2">
+                           {" "}
               <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                <Settings className="w-5 h-5 text-primary" />
+                                <Settings className="w-5 h-5 text-primary" />   
+                         {" "}
               </div>
+                           {" "}
               <h1 className="2xl font-cinzel font-semibold text-foreground">
-                Mystical Settings
+                                Mystical Settings              {" "}
               </h1>
+                         {" "}
             </div>
+                       {" "}
             <p className="text-muted-foreground">
-              Configure your wellness grimoire to your preferences
+                            Configure your wellness grimoire to your preferences
+                         {" "}
             </p>
+                     {" "}
           </motion.div>
+                 {" "}
         </header>
-
+               {" "}
         <main className="flex-1 overflow-auto p-6 space-y-6">
+                   {" "}
           <div className="max-w-4xl mx-auto space-y-6">
-            {/* Profile Settings */}
+                        {/* Profile Settings */}           {" "}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.1 }}
             >
+                           {" "}
               <Card className="magical-glow">
+                               {" "}
                 <CardHeader>
+                                   {" "}
                   <CardTitle className="font-cinzel flex items-center space-x-2">
-                    <User className="w-5 h-5" />
-                    <span>Alchemist Profile</span>
+                                        <User className="w-5 h-5" />           
+                            <span>Alchemist Profile</span>                 {" "}
                   </CardTitle>
+                                 {" "}
                 </CardHeader>
+                               {" "}
                 <CardContent className="space-y-4">
+                                   {" "}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                       {" "}
                     <div className="space-y-2">
-                      <Label htmlFor="name">Mystical Name</Label>
+                                           {" "}
+                      <Label htmlFor="name">Mystical Name</Label>               
+                           {" "}
                       <Input
                         id="name"
-                        name="name"
-                        // Display value comes directly from local state
+                        name="name" // Display value comes directly from local state
                         value={profileFormData.fullName}
                         onChange={(e) =>
                           handleSettingChange("name", e.target.value)
                         }
                         placeholder="Your alchemist name"
                       />
+                                         {" "}
                     </div>
+                                       {" "}
                     <div className="space-y-2">
-                      <Label htmlFor="email">Email</Label>
+                                            <Label htmlFor="email">Email</Label>
+                                           {" "}
                       <Input
                         id="email"
                         name="email"
-                        type="email"
-                        // Display value comes directly from local state
-                        value={profileFormData.email}
+                        type="email" // Display value comes directly from local state
+                        value={profileFormData.email} // --- FIX: MAKE NON-EDITABLE ---
+                        disabled={true}
                         onChange={(e) =>
                           handleSettingChange("email", e.target.value)
                         }
                         placeholder="your@email.com"
                       />
+                                         {" "}
                     </div>
+                                     {" "}
                   </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="timezone">
-                      <div className="flex items-center space-x-2">
-                        <Clock className="w-4 h-4" />
-                        <span>Timezone</span>
-                      </div>
-                    </Label>
-                    <Select
-                      value={profileFormData.timezone}
-                      onValueChange={(value) =>
-                        handleSettingChange("timezone", value)
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {timezones.map((tz) => (
-                          <SelectItem key={tz} value={tz}>
-                            {tz.replace("_", " ")}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                                                   {" "}
                 </CardContent>
+                             {" "}
               </Card>
+                         {" "}
             </motion.div>
-
-            {/* Notification Settings */}
+                        {/* Notification Settings */}           {" "}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.2 }}
             >
+                           {" "}
               <Card className="magical-glow">
+                               {" "}
                 <CardHeader>
+                                   {" "}
                   <CardTitle className="font-cinzel flex items-center space-x-2">
-                    <Bell className="w-5 h-5" />
-                    <span>Mystical Alerts</span>
+                                        <Bell className="w-5 h-5" />           
+                            <span>Mystical Alerts</span>                 {" "}
                   </CardTitle>
+                                 {" "}
                 </CardHeader>
+                               {" "}
                 <CardContent className="space-y-6">
+                                   {" "}
                   <div className="space-y-4">
+                                       {" "}
                     <div className="flex items-center justify-between">
+                                           {" "}
                       <div>
+                                               {" "}
                         <Label htmlFor="browser-notifications">
-                          Browser Notifications
+                                                    Browser Notifications      
+                                           {" "}
                         </Label>
+                                               {" "}
                         <p className="text-sm text-muted-foreground">
-                          Receive alerts in your browser
+                                                    Receive alerts in your
+                          browser                        {" "}
                         </p>
+                                             {" "}
                       </div>
+                                           {" "}
                       <Switch
-                        id="browser-notifications"
-                        // Display value comes from user object
+                        id="browser-notifications" // Display value comes from user object
                         checked={currentBrowserPref}
                         onCheckedChange={
                           (value) =>
@@ -546,20 +521,27 @@ export function SettingsPage() {
                         }
                         disabled={isLoading}
                       />
+                                         {" "}
                     </div>
-
+                                       {" "}
                     <div className="flex items-center justify-between">
+                                           {" "}
                       <div>
+                                               {" "}
                         <Label htmlFor="email-notifications">
-                          Email Notifications
+                                                    Email Notifications        
+                                         {" "}
                         </Label>
+                                               {" "}
                         <p className="text-sm text-muted-foreground">
-                          Receive reminder emails
+                                                    Receive reminder emails    
+                                             {" "}
                         </p>
+                                             {" "}
                       </div>
+                                           {" "}
                       <Switch
-                        id="email-notifications"
-                        // Display value comes from user object
+                        id="email-notifications" // Display value comes from user object
                         checked={currentEmailPref}
                         onCheckedChange={
                           (value) =>
@@ -570,17 +552,25 @@ export function SettingsPage() {
                         }
                         disabled={isLoading}
                       />
+                                         {" "}
                     </div>
-
+                                       {" "}
                     <div className="flex items-center justify-between">
+                                           {" "}
                       <div>
+                                               {" "}
                         <Label htmlFor="sms-notifications">
-                          SMS Notifications
+                                                    SMS Notifications          
+                                       {" "}
                         </Label>
+                                               {" "}
                         <p className="text-sm text-muted-foreground">
-                          Receive text message alerts
+                                                    Receive text message alerts
+                                                 {" "}
                         </p>
+                                             {" "}
                       </div>
+                                           {" "}
                       <Switch
                         id="sms-notifications"
                         checked={settings.smsNotifications}
@@ -589,13 +579,14 @@ export function SettingsPage() {
                         }
                         disabled={isLoading}
                       />
+                                         {" "}
                     </div>
+                                     {" "}
                   </div>
-
-                  <Separator />
-
+                                    <Separator />                 {" "}
                   <div className="space-y-2">
-                    <Label>Reminder Timing</Label>
+                                        <Label>Reminder Timing</Label>         
+                             {" "}
                     <Select
                       value={profileFormData.reminderBefore} // Read from local state
                       onValueChange={(value) =>
@@ -603,55 +594,84 @@ export function SettingsPage() {
                       }
                       disabled={isLoading}
                     >
+                                           {" "}
                       <SelectTrigger>
-                        <SelectValue />
+                                                <SelectValue />                 
+                           {" "}
                       </SelectTrigger>
+                                           {" "}
                       <SelectContent>
+                                               {" "}
                         {reminderOptions.map((option) => (
                           <SelectItem key={option.value} value={option.value}>
-                            {option.label} before
+                                                        {option.label} before  
+                                                   {" "}
                           </SelectItem>
                         ))}
+                                             {" "}
                       </SelectContent>
+                                         {" "}
                     </Select>
+                                     {" "}
                   </div>
+                                 {" "}
                 </CardContent>
+                             {" "}
               </Card>
+                         {" "}
             </motion.div>
-
-            {/* Integration Settings */}
+                        {/* Integration Settings */}           {" "}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.3 }}
             >
+                           {" "}
               <Card className="magical-glow">
+                               {" "}
                 <CardHeader>
+                                   {" "}
                   <CardTitle className="font-cinzel flex items-center space-x-2">
-                    <Calendar className="w-5 h-5" />
-                    <span>Mystical Integrations</span>
+                                        <Calendar className="w-5 h-5" />       
+                                <span>Mystical Integrations</span>             
+                       {" "}
                   </CardTitle>
+                                 {" "}
                 </CardHeader>
+                               {" "}
                 <CardContent className="space-y-4">
+                                   {" "}
                   <div className="flex items-center justify-between">
+                                       {" "}
                     <div>
+                                           {" "}
                       <Label htmlFor="google-calendar">
-                        Google Calendar Sync
+                                                Google Calendar Sync            
+                                 {" "}
                       </Label>
+                                           {" "}
                       <p className="text-sm text-muted-foreground">
-                        Sync medicine schedules with Google Calendar
+                                                Sync medicine schedules with
+                        Google Calendar                      {" "}
                       </p>
+                                         {" "}
                     </div>
-                    {/* 🎯 Use the derived stable value directly in JSX */}
+                                       {" "}
+                    {/* 🎯 Use the derived stable value directly in JSX */}     
+                                 {" "}
                     {isGoogleConnected ? (
                       <div className="flex space-x-2">
+                                               {" "}
                         <Button
                           variant="success"
                           disabled
                           className="bg-green-500 hover:bg-green-600 text-white"
                         >
-                          <Check className="w-4 h-4 mr-2" /> Connected
+                                                   {" "}
+                          <Check className="w-4 h-4 mr-2" /> Connected          
+                                       {" "}
                         </Button>
+                                               {" "}
                         <Button
                           variant="outline"
                           onClick={handleDisconnectGoogle}
@@ -659,8 +679,11 @@ export function SettingsPage() {
                           className="hover:bg-red-500/10 hover:text-red-400"
                           disabled={isLoading}
                         >
-                          <LinkIcon className="w-4 h-4" />
+                                                   {" "}
+                          <LinkIcon className="w-4 h-4" />                     
+                           {" "}
                         </Button>
+                                             {" "}
                       </div>
                     ) : (
                       <Button
@@ -669,56 +692,54 @@ export function SettingsPage() {
                         className="magical-glow"
                         disabled={isLoading}
                       >
-                        Connect Calendar
+                                                Connect Calendar                
+                             {" "}
                       </Button>
                     )}
+                                     {" "}
                   </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label htmlFor="apple-health">
-                        Apple Health Integration
-                      </Label>
-                      <p className="text-sm text-muted-foreground">
-                        Share data with Apple Health app
-                      </p>
-                    </div>
-                    <Switch
-                      id="apple-health"
-                      checked={settings.appleHealth}
-                      onCheckedChange={(value) =>
-                        handleSettingChange("appleHealth", value)
-                      }
-                      disabled={isLoading}
-                    />
-                  </div>
+                                                   {" "}
                 </CardContent>
+                             {" "}
               </Card>
+                         {" "}
             </motion.div>
-
-            {/* Appearance Settings */}
+                        {/* Appearance Settings */}           {" "}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.4 }}
             >
+                           {" "}
               <Card className="magical-glow">
+                               {" "}
                 <CardHeader>
+                                   {" "}
                   <CardTitle className="font-cinzel flex items-center space-x-2">
-                    <Moon className="w-5 h-5" />
-                    <span>Mystical Appearance</span>
+                                        <Moon className="w-5 h-5" />           
+                            <span>Mystical Appearance</span>                 {" "}
                   </CardTitle>
+                                 {" "}
                 </CardHeader>
+                               {" "}
                 <CardContent className="space-y-4">
+                                   {" "}
                   <div className="flex items-center justify-between">
+                                       {" "}
                     <div>
-                      <Label htmlFor="dark-mode">Dark Magic Mode</Label>
+                                           {" "}
+                      <Label htmlFor="dark-mode">Dark Magic Mode</Label>       
+                                   {" "}
                       <p className="text-sm text-muted-foreground">
-                        Toggle between light and dark mystical themes
+                                                Toggle between light and dark
+                        mystical themes                      {" "}
                       </p>
+                                         {" "}
                     </div>
+                                       {" "}
                     <div className="flex items-center space-x-2">
-                      <Sun className="w-4 h-4" />
+                                            <Sun className="w-4 h-4" />         
+                                 {" "}
                       <Switch
                         id="dark-mode"
                         checked={theme === "dark"}
@@ -727,25 +748,31 @@ export function SettingsPage() {
                         }
                         disabled={isLoading}
                       />
-                      <Moon className="w-4 h-4" />
+                                            <Moon className="w-4 h-4" />       
+                                 {" "}
                     </div>
+                                     {" "}
                   </div>
+                                 {" "}
                 </CardContent>
+                             {" "}
               </Card>
+                         {" "}
             </motion.div>
-
-            {/* Actions */}
+                        {/* Actions */}           {" "}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.6 }}
               className="flex flex-col sm:flex-row gap-4"
             >
+                           {" "}
               <Button
                 onClick={handleSaveSettings}
                 disabled={isLoading}
                 className="flex-1 magical-glow"
               >
+                               {" "}
                 {isLoading ? (
                   <motion.div
                     animate={{ rotate: 360 }}
@@ -755,33 +782,41 @@ export function SettingsPage() {
                       ease: "linear",
                     }}
                   >
-                    <Loader2 className="w-4 h-4" />
+                                        <Loader2 className="w-4 h-4" />         
+                           {" "}
                   </motion.div>
                 ) : (
                   <>
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Settings
+                                        <Save className="w-4 h-4 mr-2" />       
+                                Save Settings                  {" "}
                   </>
                 )}
+                             {" "}
               </Button>
-
+                           {" "}
               <Button
                 variant="destructive"
                 onClick={handleDeleteAccount}
                 className="sm:w-auto"
                 disabled={isLoading}
               >
+                               {" "}
                 {isLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin mr-2" />
                 ) : (
                   <Trash2 className="w-4 h-4 mr-2" />
                 )}
-                Delete Account
+                                Delete Account              {" "}
               </Button>
+                         {" "}
             </motion.div>
+                     {" "}
           </div>
+                 {" "}
         </main>
+             {" "}
       </div>
+         {" "}
     </div>
   );
 }
