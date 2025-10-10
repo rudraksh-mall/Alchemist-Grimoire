@@ -1,33 +1,24 @@
 import { create } from "zustand";
-// FIX: Import the default export (the main Axios instance) as 'api',
-// and import 'authApi' as a named export.
 import api, { authApi } from "../services/api.js";
 
-// --- CRITICAL FIX START: Safest Initialization ---
-
 const getInitialUser = () => {
-  // 1. Get the raw string from localStorage.
+  //  Get the raw string from localStorage.
   const rawUser = localStorage.getItem("alchemist_user");
 
-  // 2. CHECK 1: If the item is the literal string "undefined", treat it as empty.
   if (!rawUser || rawUser === "undefined" || rawUser === "null") {
     return null;
   }
 
   try {
-    // 3. CHECK 2: Attempt to parse the valid string.
     const parsed = JSON.parse(rawUser);
 
-    // 4. CHECK 3: Ensure the parsed object has the expected 'user' structure, otherwise return null.
     const userObject = parsed.user || parsed;
 
-    // 5. Final check: Ensure we have a valid object with at least an _id (the minimum structure).
     if (userObject && typeof userObject === "object" && userObject._id) {
       return userObject;
     }
     return null;
   } catch (e) {
-    // 5. If parsing fails (e.g., corrupted JSON), log error and return null.
     console.error("Corrupted JSON in localStorage. User data reset.", e);
     localStorage.removeItem("alchemist_user");
     return null;
@@ -37,15 +28,11 @@ const getInitialUser = () => {
 const initialUser = getInitialUser();
 const initialToken = localStorage.getItem("alchemist_token") || null;
 
-// --- CRITICAL FIX END ---
-
 const useAuthStore = create((set, get) => ({
-  // Use the safely derived initial values
   user: initialUser,
   accessToken: initialToken,
   isLoading: true,
 
-  // NEW: Setter for local loading state in the component
   setIsLoading: (status) => set({ isLoading: status }),
 
   // Initialize authentication state on app mount
@@ -57,8 +44,6 @@ const useAuthStore = create((set, get) => ({
     }
 
     try {
-      // Use the default API instance imported as 'api'
-      // CRITICAL FIX: Removed redundant '/v1' prefix from the path.
       const { data } = await api.get("/users/current-user");
 
       const currentUser = data.data;
@@ -70,7 +55,6 @@ const useAuthStore = create((set, get) => ({
         isLoading: false,
       });
     } catch (error) {
-      // This catch now triggers the interceptor, which attempts refresh.
       console.error("Token invalid or expired:", error);
       get().logout();
     } finally {
@@ -78,10 +62,10 @@ const useAuthStore = create((set, get) => ({
     }
   },
 
-  // 🎯 NEW ACTION: Manually fetch and update the current user object
+  // Fetch and update the current user object
   updateCurrentUser: async () => {
     try {
-      // 🎯 CRITICAL FIX: Removed redundant '/v1' prefix from the path.
+      
       const { data } = await api.get("/users/current-user");
       const updatedUser = data.data;
 
@@ -94,7 +78,6 @@ const useAuthStore = create((set, get) => ({
     }
   },
 
-  // === NEW FEATURE: SAVE ALL USER SETTINGS (Timezone, Reminder Timing, Name) ===
   updateUserSettingsAction: async (settingsData) => {
     set({ isLoading: true });
     try {
@@ -116,9 +99,8 @@ const useAuthStore = create((set, get) => ({
       set({ isLoading: false });
     }
   },
-  // ============================================================================
-
-  // 🎯 NEW ACTION: Finalizes login after successful OTP verification
+ 
+  // Finalizes login after successful OTP verification
   finalizeLogin: (user, accessToken) => {
     localStorage.setItem("alchemist_user", JSON.stringify(user));
     localStorage.setItem("alchemist_token", accessToken);

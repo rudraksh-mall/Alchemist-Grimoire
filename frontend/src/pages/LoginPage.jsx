@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, Link } from "react-router-dom";
 import { Sparkles, Mail, Lock, Eye, EyeOff, KeyRound, Loader2 } from "lucide-react";
-// FIX: Added explicit file extensions to resolve compiler errors
 import useAuthStore from "../hooks/useAuthStore.js"; 
 import { Button } from "../components/ui/button.jsx"; 
 import { Input } from "../components/ui/input.jsx"; 
@@ -15,11 +14,9 @@ import {
 } from "../components/ui/card.jsx"; 
 import { Separator } from "../components/ui/separator.jsx"; 
 import { toast } from "sonner";
-import { authApi } from '../services/api.js'; // Added .js extension
+import { authApi } from '../services/api.js'; 
 
 export function LoginPage() {
-  // FIX: Separate state access to prevent creating a new object on every render.
-  // This is the safest way to consume Zustand state and actions without useShallow.
   const user = useAuthStore(state => state.user);
   const storeLoading = useAuthStore(state => state.isLoading);
   const finalizeLogin = useAuthStore(state => state.finalizeLogin);

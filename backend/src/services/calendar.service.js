@@ -55,12 +55,12 @@ export const createCalendarEvent = async (schedule, refreshToken) => {
     description: `Time to take your scheduled dose. Sync managed by Alchemist's Grimoire.`,
     start: {
       dateTime: `${startDateISO}T${startTime}:00`,
-      timeZone: userTimezone,
+      timeZone: "IST",
     },
     end: {
       // Event lasts 5 minutes for simplicity
       dateTime: `${startDateISO}T${startTime.split(":")[0]}:${parseInt(startTime.split(":")[1]) + 5}:00`,
-      timeZone: userTimezone,
+      timeZone: "IST",
     },
     recurrence: [recurrenceRule], // Contains the UNTIL clause if applicable
     colorId: 9, // A pleasant purple/grape color for events
