@@ -1,13 +1,26 @@
 import axios from "axios";
 
-// 1. Set baseURL to include /v1 and use 'const' for named export compatibility
 const api = axios.create({
-  // CRITICAL FIX: Base URL is set to the correct root /api/v1
   baseURL: "http://localhost:8000/api/v1",
-  withCredentials: true,
+  withCredentials: true, // send cookies
 });
 
-// Request interceptor: attach access token (no change needed here)
+
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
+// Request interceptor
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("alchemist_token");
@@ -19,45 +32,76 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor: handle 401 and refresh token
+// Response interceptor
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
-    // Check if 401 and we haven't retried yet
-    if (
-      error.response?.status === 401 &&
-      !originalRequest._retry &&
-      // FIX: Check against consolidated /users routes
-      !originalRequest.url.includes("/users/login") &&
-      !originalRequest.url.includes("/users/verify-otp") &&
-      !originalRequest.url.includes("/users/register")
-    ) {
+    // Skip auth routes from refresh logic
+    const authPaths = [
+      "/users/login",
+      "/users/register",
+      "/users/verify-otp",
+      "/users/refresh-token",
+      "/users/logout",
+    ];
+    if (authPaths.some((p) => originalRequest.url.includes(p))) {
+      return Promise.reject(error);
+    }
+
+    // If 401 Unauthorized and not retried
+    if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
+      // If a refresh is already happening, queue this request
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            return api(originalRequest);
+          })
+          .catch((err) => Promise.reject(err));
+      }
+
+      isRefreshing = true;
+
       try {
-        // FIX: Update refresh token path and token access
+        // Check if we even have a refresh token cookie / access token
+        const accessToken = localStorage.getItem("alchemist_token");
+        if (!accessToken) {
+          throw new Error("No access token; user logged out.");
+        }
+
         const refreshResponse = await api.post(
           "/users/refresh-token",
           {},
           { withCredentials: true }
         );
-        // NOTE: Access token path confirmed from controller logic
-        const newAccessToken = refreshResponse.data.data.token;
 
-        // Update localStorage
-        localStorage.setItem("alchemist_token", newAccessToken);
+        const newToken = refreshResponse.data?.data?.token;
+        if (!newToken) throw new Error("Refresh failed: no token received.");
 
-        // Retry original request with new token
-        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+        // Save new token
+        localStorage.setItem("alchemist_token", newToken);
+
+        processQueue(null, newToken);
+
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return api(originalRequest);
       } catch (err) {
-        // Refresh token failed → log out user
+        processQueue(err, null);
+
+        // Cleanup and redirect to login
         localStorage.removeItem("alchemist_token");
         localStorage.removeItem("alchemist_user");
-        window.location.href = "/login"; // redirect to login page
+        window.location.href = "/login";
+
         return Promise.reject(err);
+      } finally {
+        isRefreshing = false;
       }
     }
 
@@ -65,9 +109,7 @@ api.interceptors.response.use(
   }
 );
 
-// Mock data (omitted for brevity)
 
-// API Functions: All prefixes are now correct (e.g., /medications instead of /v1/medications)
 export const medicineApi = {
   getAll: async () => {
     const response = await api.get("/medications");
@@ -107,6 +149,13 @@ export const doseApi = {
     const response = await api.get("/dose-logs/today");
     return response.data.data;
   },
+  // AI Prediction Retrieval
+  getPrediction: async () => {
+    const response = await api.get("/dose-logs/predict");
+    // Returns the AI's structured JSON output: { summary, riskLevel, proactiveNudge }
+    return response.data.data; 
+  },
+  
   markAsTaken: async (logId, actualTime) => {
     const response = await api.put(`/dose-logs/${logId}`, {
       status: "taken",
@@ -144,7 +193,7 @@ export const chatApi = {
   },
 };
 
-// --- AUTH API: Implements user settings and token flow ---
+// AUTH API
 export const authApi = {
   register: async (email, password, fullName) => {
     const { data } = await api.post(
@@ -176,14 +225,13 @@ export const authApi = {
     };
   },
 
-  // === NEW FEATURE: UPDATE GENERAL USER SETTINGS (Timezone, Reminder Timing, Name) ===
+  // UPDATE GENERAL USER SETTINGS
   updateUserSettings: async ({
     fullName,
     email,
     timezone,
     reminderTimingMinutes,
   }) => {
-    // PATCH /v1/users/update-details
     const response = await api.patch("/users/update-details", {
       fullName,
       email,
@@ -192,17 +240,14 @@ export const authApi = {
     });
     return response.data.data; // Returns the updated safe user object
   },
-  // ==================================================================================
 
-  // === NEW FEATURE: UPDATE NOTIFICATIONS ===
+  // UPDATE NOTIFICATIONS
   updateNotifications: async (preferences) => {
-    // PATCH /v1/users/notifications
     const response = await api.patch("/users/notifications", preferences);
     return response.data.data; // Should return the updated user object
   },
-  // =========================================
 
-  // === NEW FEATURE: BROWSER SUBSCRIPTION API ===
+  // BROWSER SUBSCRIPTION API
   saveSubscription: async (subscriptionObject) => {
     // POST /v1/users/subscribe
     const response = await api.post("/users/subscribe", {
@@ -210,16 +255,14 @@ export const authApi = {
     });
     return response.data.data; // Returns the updated user object
   },
-  // ===========================================
 
-  // === NEW FEATURE: DELETE ACCOUNT ===
+  // DELETE ACCOUNT
   deleteAccount: async () => {
     const response = await api.delete("/users/delete-account");
     console.log(response.data);
 
     return response.data;
   },
-  // ===================================
 
   disconnectGoogle: async () => {
     const response = await api.delete("/users/google/disconnect");
@@ -240,5 +283,4 @@ export const authApi = {
   },
 };
 
-// Export the main Axios instance as the default export.
 export default api;

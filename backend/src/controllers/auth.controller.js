@@ -7,26 +7,18 @@ import { MedicationSchedule } from "../models/medicationSchedule.model.js";
 import { oauth2Client, SCOPES } from "../utils/googleAuth.js";
 import { StatusCodes } from "http-status-codes";
 import jwt from "jsonwebtoken";
-
 import { generateAndSaveOtp, verifyOtp } from "../services/otp.service.js";
 import { sendEmail } from "../services/email.service.js";
 
 const getCookieOptions = () => {
-  if (process.env.NODE_ENV === "production") {
-    // Production settings (requires HTTPS)
-    return {
-      httpOnly: true,
-      secure: true,
-      sameSite: "none",
-    };
-  } else {
-    // Development settings (HTTP localhost)
-    return {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax",
-    };
-  }
+  const isProduction = process.env.NODE_ENV === "production";
+
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "none",
+    path: "/",
+  };
 };
 
 // Function to safely return a user object without sensitive fields
@@ -62,6 +54,8 @@ const generateAccessAndRefreshTokens = async (userId) => {
   }
 };
 
+// Registering User
+
 const registerUser = asyncHandler(async (req, res) => {
   const { fullName, email, password, timezone } = req.body;
 
@@ -72,7 +66,6 @@ const registerUser = asyncHandler(async (req, res) => {
   const existedUser = await User.findOne({ email });
   if (existedUser) throw new ApiError(409, "Email already registered");
 
-  //  Create the user (defaults to isVerified: false)
   const user = await User.create({
     fullName,
     email,
@@ -81,10 +74,8 @@ const registerUser = asyncHandler(async (req, res) => {
     isVerified: false,
   });
 
-  // Generate and save the OTP
   const rawOtp = await generateAndSaveOtp(email);
 
-  //  Send the email
   await sendEmail({
     to: email,
     subject: "🎪 Alchemist's Grimoire: Your Registration Code",
@@ -100,7 +91,6 @@ const registerUser = asyncHandler(async (req, res) => {
       `,
   });
 
-  // Return success response. (Frontend moves to verification step)
   return res
     .status(201)
     .json(
@@ -112,7 +102,6 @@ const registerUser = asyncHandler(async (req, res) => {
     );
 });
 
-//  Send OTP (Login Step 1: Check Password & Send Code)
 const sendOtp = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
@@ -125,16 +114,16 @@ const sendOtp = asyncHandler(async (req, res) => {
     throw new ApiError(404, "User not found.");
   }
 
-  //  Validate the password first
+  // Validate the password first
   const isPasswordValid = await user.isPasswordCorrect(password);
   if (!isPasswordValid) {
     throw new ApiError(401, "Invalid credentials.");
   }
 
-  //  Generate and save the OTP
+  // Generate and save the OTP
   const rawOtp = await generateAndSaveOtp(email);
 
-  //  Send the email (Circus Crier)
+  // Send the email (Circus Crier)
   await sendEmail({
     to: email,
     subject: "🎪 Alchemist's Grimoire: Your Login OTP Code",
@@ -161,7 +150,6 @@ const sendOtp = asyncHandler(async (req, res) => {
     );
 });
 
-//  Verify OTP and Complete Login
 const verifyOtpAndLogin = asyncHandler(async (req, res) => {
   const { email, otp } = req.body;
 
@@ -169,7 +157,7 @@ const verifyOtpAndLogin = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Email and One-Time Password (OTP) are required.");
   }
 
-  //  Verify the OTP using the service
+  // Verify the OTP using the service
   const verificationResult = await verifyOtp(email, otp);
 
   if (!verificationResult.success) {
@@ -178,19 +166,12 @@ const verifyOtpAndLogin = asyncHandler(async (req, res) => {
 
   const user = verificationResult.user;
 
-  //  Generate new tokens for login
+  // Generate new tokens for login
   const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
     user._id
   );
 
-  // Use the robust options getter
   const options = getCookieOptions();
-
-  // Log the cookie options being set during successful login/verification
-  console.log(
-    `[DEBUG-AUTH] Setting Refresh Token Cookie with options:`,
-    options
-  );
 
   const userSafe = await getSafeUser(user._id);
 
@@ -214,7 +195,6 @@ const loginUser = sendOtp;
 const logoutUser = asyncHandler(async (req, res) => {
   await User.findByIdAndUpdate(req.user._id, { $unset: { refreshToken: 1 } });
 
-  // Ensure clearCookie uses the same options set during cookie creation
   const options = getCookieOptions();
 
   res
@@ -235,13 +215,10 @@ const getCurrentUser = asyncHandler(async (req, res) => {
 // REFRESH ACCESS TOKEN
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
-  console.log(`\n--- REFRESH ATTEMPT ---`);
-  console.log(`[DEBUG-REFRESH-1] Incoming Request URL: ${req.originalUrl}`);
-  console.log(`[DEBUG-REFRESH-2] Parsed Cookies (Express):`, req.cookies);
-
   const incomingRefreshToken =
     req.cookies.refreshToken || req.body.refreshToken;
 
+  // DEBUG LOG: Check if the token was successfully extracted
   if (!incomingRefreshToken) {
     console.error(
       `[DEBUG-REFRESH-FAIL] Token Missing! Browser did not send the cookie.`
@@ -249,6 +226,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     throw new ApiError(401, "Unauthorized request: Refresh token missing.");
   }
 
+  // DEBUG LOG: Log if JWT verification fails (Token is expired/malformed)
   console.log(
     `[DEBUG-REFRESH] Refresh Token Extracted. Attempting verification...`
   );
@@ -274,7 +252,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 
   const options = getCookieOptions();
 
-  //  Log the new cookie options before sending a new one.
+  // DEBUG LOG: Log the new cookie options before sending a new one.
   console.log(`[DEBUG-REFRESH-SUCCESS] Renewed RT. New Options:`, options);
 
   return res
@@ -285,9 +263,10 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     );
 });
 
-//  TOGGLE NOTIFICATIONS CONTROLLER
+// TOGGLE NOTIFICATIONS CONTROLLER 
 const updateNotificationPreferences = asyncHandler(async (req, res) => {
   const userId = req.user._id;
+  // We expect the body to contain the new settings object
   const { browserNotifications, emailNotifications } = req.body;
 
   // Input Validation
@@ -307,7 +286,6 @@ const updateNotificationPreferences = asyncHandler(async (req, res) => {
         "notificationPreferences.email": emailNotifications,
       },
     },
-    // IMPORTANT: Return the new document
     { new: true }
   );
 
@@ -354,7 +332,7 @@ const saveBrowserSubscription = asyncHandler(async (req, res) => {
       );
   }
 
-  //  If the subscription is valid, update the User document to save it.
+  // If the subscription is valid, update the User document to save it.
   const updatedUser = await User.findByIdAndUpdate(
     userId,
     {
@@ -405,7 +383,6 @@ const deleteAccount = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, null, "Account deleted successfully."));
 });
 
-// Implement updateAccountDetails to save the new Reminder Timing field
 const updateAccountDetails = asyncHandler(async (req, res) => {
   const { fullName, email, timezone } = req.body;
   const { reminderTimingMinutes } = req.body;
@@ -420,15 +397,13 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
   };
 
   // Conditionally add the reminder timing only if it exists in the request body
-  // We check if it is explicitly in the body, which it will be from the frontend Save function.
   if (reminderTimingMinutes !== undefined) {
     updateObject.reminderTimingMinutes = reminderTimingMinutes;
   }
 
-  // Perform update
   const updatedUser = await User.findByIdAndUpdate(
     req.user._id,
-    updateObject, // Use the dynamically created object
+    updateObject,
     { new: true, runValidators: true } // Ensure validation runs for the new Number field
   );
 
@@ -459,10 +434,10 @@ const googleAuthLogin = (req, res) => {
   res.redirect(authUrl);
 };
 
+// Google Callback (Handles token exchange)
 const googleAuthCallback = asyncHandler(async (req, res) => {
   const { code, state: userId } = req.query; // Get the auth code and the user ID we sent earlier
 
-  // 🎯 NOTE: Assuming your frontend is running on localhost:5173
   const FRONTEND_SETTINGS_URL = process.env.CORS_ORIGIN + "/settings";
 
   if (!code || !userId) {
@@ -491,6 +466,7 @@ const googleAuthCallback = asyncHandler(async (req, res) => {
       { new: true }
     );
 
+    // Use the correct success parameter name expected by the frontend (calendar_sync=success)
     res.redirect(FRONTEND_SETTINGS_URL + "?calendar_sync=success");
   } catch (error) {
     console.error("Error exchanging Google token:", error);
@@ -499,6 +475,7 @@ const googleAuthCallback = asyncHandler(async (req, res) => {
   }
 });
 
+// Disconnect Google Calendar
 const disconnectGoogle = asyncHandler(async (req, res) => {
   // Clear the token field using $unset
   await User.findByIdAndUpdate(req.user._id, {

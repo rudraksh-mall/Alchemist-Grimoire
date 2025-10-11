@@ -2,7 +2,9 @@ import { DoseLog } from "../models/doseLog.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import { analyzeAndPredictAdherence } from '../services/prediction.service.js'; // Import the new AI service
 
+// Log a dose action (taken, missed, snoozed)
 const createDoseLog = asyncHandler(async (req, res) => {
   const { scheduleId, scheduledFor } = req.body;
 
@@ -21,6 +23,7 @@ const createDoseLog = asyncHandler(async (req, res) => {
     .status(201)
     .json(new ApiResponse(201, doseLog, "Dose log created successfully"));
 });
+
 
 const updateDoseLog = asyncHandler(async (req, res) => {
   const { logId } = req.params;
@@ -91,13 +94,12 @@ const getTodaysDoseLogs = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
   // Calculate today's date boundaries in UTC (to match doseCreation.service.js)
-  // Get current date, then normalize it to UTC midnight (start of today)
   const startOfToday = new Date();
-  startOfToday.setUTCHours(0, 0, 0, 0);
+  startOfToday.setHours(0, 0, 0, 0);
 
   // Get start of tomorrow (end of today)
   const endOfToday = new Date(startOfToday);
-  endOfToday.setUTCDate(startOfToday.getUTCDate() + 1);
+  endOfToday.setDate(startOfToday.getDate() + 1);
 
   // Query for pending logs scheduled for TODAY AND the CURRENT MOMENT (or later)
   const logs = await DoseLog.find({
@@ -113,8 +115,6 @@ const getTodaysDoseLogs = asyncHandler(async (req, res) => {
       select: "name dosage color",
     })
     .sort({ scheduledFor: 1 }); // Sort by time ascending
-
-  //  Removed redundant client-side filtering. MongoDB handles the future-time check.
 
   console.log(
     `[Dose Log Debug] Found ${logs.length} upcoming doses for client.`
@@ -141,13 +141,13 @@ const getAllDoseLogs = asyncHandler(async (req, res) => {
     new ApiResponse(200, doseLogs, "All dose logs retrieved successfully")
   );
 });
-
+// getAdherenceStats
 const getAdherenceStats = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const now = new Date();
   const thirtyDaysAgo = new Date(now.setDate(now.getDate() - 30));
 
-  //  Calculate Overall Statistics (for Pie Chart)
+  // Calculate Overall Statistics (for Pie Chart)
   // We use the aggregation pipeline to get counts for only COMPLETED statuses
   const statsPipeline = [
     {
@@ -178,7 +178,9 @@ const getAdherenceStats = asyncHandler(async (req, res) => {
       ? Math.round((takenDoses / totalCompletedDoses) * 100)
       : 0;
 
+  // Calculate Weekly Trend (for Line Chart)
   const weeklyTrendPipeline = [
+    // Match only COMPLETED doses first to get accurate weekly totals
     {
       $match: {
         userId,
@@ -224,6 +226,46 @@ const getAdherenceStats = asyncHandler(async (req, res) => {
   );
 });
 
+// AI ADHERENCE PREDICTION ENDPOINT
+const getAdherencePrediction = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+
+    // Find the next upcoming pending dose (required for prediction context)
+    const nextDose = await DoseLog.findOne({
+        userId,
+        status: 'pending',
+        scheduledFor: { $gt: new Date(Date.now() - 60000) } // Scheduled for the immediate future
+    })
+    .populate({
+        path: 'scheduleId',
+        select: 'name dosage'
+    })
+    .sort({ scheduledFor: 1 }); // Get the soonest one
+
+    if (!nextDose || !nextDose.scheduleId) {
+        return res.json(new ApiResponse(
+            200,
+            { summary: "No upcoming doses found. Relax, Alchemist!", riskLevel: "LOW", proactiveNudge: null },
+            "Prediction successful."
+        ));
+    }
+
+    // Format the necessary data for the AI service
+    const upcomingDoseDetails = {
+        name: nextDose.scheduleId.name,
+        dosage: nextDose.scheduleId.dosage,
+        scheduledFor: nextDose.scheduledFor,
+        doseId: nextDose._id // Pass the ID for potential nudging functionality later
+    };
+
+    // Call the AI Prediction Service (The Mystic Fortune Teller)
+    const prediction = await analyzeAndPredictAdherence(userId, upcomingDoseDetails);
+
+    return res.json(
+        new ApiResponse(200, prediction, "Prediction successful.")
+    );
+});
+
 export {
   createDoseLog,
   updateDoseLog,
@@ -231,4 +273,5 @@ export {
   getTodaysDoseLogs,
   getAdherenceStats,
   getAllDoseLogs,
+  getAdherencePrediction,
 };

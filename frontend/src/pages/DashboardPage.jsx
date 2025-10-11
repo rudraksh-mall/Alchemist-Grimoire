@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Plus, Calendar, TrendingUp, Pill } from "lucide-react";
+import { Plus, Calendar, TrendingUp, Pill, AlertTriangle, MessageSquare } from "lucide-react";
 import useMedicineStore from "../hooks/useMedicineStore";
 import useDoseStore from "../hooks/useDoseStore";
-import { statsApi } from "../services/api";
+import { statsApi, doseApi } from "../services/api.js";
 import { Sidebar } from "../components/Sidebar";
 import { MedicineCard } from "../components/MedicineCard";
 import { DoseCard } from "../components/DoseCard";
@@ -19,7 +19,7 @@ import {
 import { Skeleton } from "../components/ui/skeleton";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import { SnoozeDoseDialog } from "../components/SnoozeDoseDialog"; // Adjust path as needed
+import { SnoozeDoseDialog } from "../components/SnoozeDoseDialog"; 
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -27,23 +27,27 @@ export function DashboardPage() {
     medicines,
     isLoading: medicinesLoading,
     fetchMedicines,
-    // 🎯 NEW: Destructure the delete action
     deleteMedicine,
   } = useMedicineStore();
   const {
     upcomingDoses,
     markAsTaken,
     markAsSkipped,
-    // 🎯 NEW: Destructure the snooze action
     snoozeDose,
     isLoading: dosesLoading,
     fetchDoses,
   } = useDoseStore();
+
   const [adherenceStats, setAdherenceStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  
+  const [prediction, setPrediction] = useState(null);
+  const [predictionLoading, setPredictionLoading] = useState(true);
+  
   const [isSnoozeDialogOpen, setIsSnoozeDialogOpen] = useState(false);
   const [snoozeTargetDoseId, setSnoozeTargetDoseId] = useState(null);
-  // 🎯 FIX 1: Define fetchStats outside useEffect so it can be reused
+  
+  // Fetches Adherence Statistics
   const fetchStats = async () => {
     setStatsLoading(true);
     try {
@@ -56,20 +60,42 @@ export function DashboardPage() {
     }
   };
 
+  // Fetches AI Prediction
+  const fetchPrediction = async () => {
+    setPredictionLoading(true);
+    try {
+      // Call the new doseApi method which hits the Gemini service
+      const result = await doseApi.getPrediction();
+      setPrediction(result);
+    } catch (error) {
+      console.error("AI Prediction Fetch Failed:", error);
+      setPrediction({ 
+        summary: "The Oracle's crystal is cloudy. Try again later.", 
+        riskLevel: "UNKNOWN", 
+        proactiveNudge: null 
+      });
+    } finally {
+      setPredictionLoading(false);
+    }
+  };
+
+
   // Fetch initial data on mount
   useEffect(() => {
     fetchMedicines();
     fetchDoses();
-    fetchStats(); // 🎯 Call for initial stats load
-  }, []); // Empty dependency array means run once on mount
+    fetchStats(); 
+    fetchPrediction(); // Call the prediction service
+  }, []); 
 
-  // 🎯 FIX 2: Call fetchStats AND fetchDoses after marking a dose as complete
+  // Call fetchStats AND fetchDoses after marking a dose as complete
   const handleTakeDose = async (id) => {
     try {
       await markAsTaken(id);
       toast.success("Dose taken! Your wellness journey continues. ✨");
-      fetchDoses(); // Refresh the upcoming doses list immediately
-      fetchStats(); // Refresh stats immediately
+      fetchDoses(); 
+      fetchStats(); 
+      fetchPrediction(); // Refresh prediction after action
     } catch (error) {
       toast.error("Failed to mark dose as taken");
     }
@@ -81,36 +107,35 @@ export function DashboardPage() {
       toast.warning(
         "Dose skipped. Remember, consistency is key to your wellness. 🌙"
       );
-      fetchDoses(); // Refresh the upcoming doses list immediately
-      fetchStats(); // Refresh stats immediately
+      fetchDoses(); 
+      fetchStats(); 
+      fetchPrediction(); // Refresh prediction after action
     } catch (error) {
       toast.error("Failed to skip dose");
     }
   };
 
   const handleOpenSnoozeDialog = (id) => {
-    // Verify 'id' is a valid value here before setting state
     if (!id) {
       toast.error("Error: Dose information is incomplete.");
       return;
     }
-    setSnoozeTargetDoseId(id); // Should set the ID from DoseCard
+    setSnoozeTargetDoseId(id); 
     setIsSnoozeDialogOpen(true);
   };
 
-  // 🎯 NEW: Handler for snoozing a dose (e.g., for 30 minutes)
+  // Handler for snoozing a dose (e.g., for 30 minutes)
   const handleSnoozeDoseConfirmed = async (id, durationInMinutes) => {
-    setIsSnoozeDialogOpen(false); // Close the dialog immediately
+    setIsSnoozeDialogOpen(false); 
     setSnoozeTargetDoseId(null);
     try {
-      // 🎯 KEY CHANGE: Use the dynamic duration
       await snoozeDose(id, durationInMinutes);
       toast.info(
         `Dose snoozed! We'll remind you in ${durationInMinutes} minutes.`
       );
 
-      fetchDoses(); // Refresh the upcoming doses list
-      // fetchStats(); // Stats won't change, but safe to refresh
+      fetchDoses(); 
+      fetchPrediction(); // Refresh prediction after action
     } catch (error) {
       toast.error("Failed to snooze dose.");
       console.error("Snooze failed:", error);
@@ -120,14 +145,13 @@ export function DashboardPage() {
     navigate("/schedule/new");
   };
 
-  // 🎯 NEW: Handler for editing a medicine
+  // Handler for editing a medicine
   const handleEditMedicine = (medicineId) => {
     navigate(`/schedule/${medicineId}`);
   };
 
-  // 🎯 NEW: Handler for deleting a medicine
+  // Handler for deleting a medicine
   const handleDeleteMedicine = async (medicineId) => {
-    // ⚠️ NOTE: window.confirm is bad practice. Replace with a custom modal in production.
     if (
       window.confirm(
         "Are you sure you want to banish this potion from your grimoire? This action cannot be undone."
@@ -137,14 +161,27 @@ export function DashboardPage() {
         await deleteMedicine(medicineId);
         toast.success("Potion successfully banished!🧹");
 
-        // Refresh dependent data
-        fetchMedicines(); // Reloads the Active Potions list
-        fetchDoses(); // Update upcoming doses
-        fetchStats(); // Update adherence stats
+        fetchMedicines(); 
+        fetchDoses(); 
+        fetchStats(); 
+        fetchPrediction(); // Refresh prediction after action
       } catch (error) {
         toast.error("Failed to banish potion.");
         console.error("Deletion failed:", error);
       }
+    }
+  };
+
+  const getRiskColor = (risk) => {
+    switch (risk) {
+      case 'HIGH':
+        return 'text-red-500 bg-red-500/10 border-red-500';
+      case 'MEDIUM':
+        return 'text-yellow-500 bg-yellow-500/10 border-yellow-500';
+      case 'LOW':
+        return 'text-green-500 bg-green-500/10 border-green-500';
+      default:
+        return 'text-gray-500 bg-gray-500/10 border-gray-500';
     }
   };
 
@@ -279,6 +316,47 @@ export function DashboardPage() {
                 </Card>
               </motion.div>
             </div>
+            
+            {/* AI Prediction Section (Mystic Fortune Teller) */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              <Card className={`magical-glow ${getRiskColor(prediction?.riskLevel)} border-4`}>
+                <CardHeader>
+                  <CardTitle className="font-cinzel flex items-center space-x-2 text-foreground">
+                    <AlertTriangle className="w-5 h-5" />
+                    <span>Mystic Fortune Teller Analysis</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {predictionLoading ? (
+                    <div className="space-y-2">
+                        <Skeleton className="h-4 w-3/4" />
+                        <Skeleton className="h-4 w-1/2" />
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className={`text-sm font-semibold`}>
+                        Risk Level: <span className={`font-bold`}>{prediction?.riskLevel || 'N/A'}</span>
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {prediction?.summary || "No recent history found to generate a detailed prediction."}
+                      </p>
+                      
+                      {prediction?.proactiveNudge && (
+                          <div className="flex items-center space-x-2 text-primary-foreground bg-primary/20 p-2 rounded-lg border border-primary/40">
+                              <MessageSquare className="w-4 h-4 shrink-0" />
+                              <span className="text-xs font-medium">{prediction.proactiveNudge}</span>
+                          </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+
 
             {/* Chart */}
             {adherenceStats && !statsLoading && (
@@ -312,7 +390,7 @@ export function DashboardPage() {
                           key={dose.id}
                           dose={dose}
                           onTake={handleTakeDose}
-                          onSkip={handleSkipDose} // 🛑 FIX HERE: Must pass the OPENER, not the CONFIRMER
+                          onSkip={handleSkipDose} 
                           onSnooze={handleOpenSnoozeDialog}
                         />
                       ))

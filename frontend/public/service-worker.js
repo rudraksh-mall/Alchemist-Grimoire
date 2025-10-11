@@ -25,9 +25,8 @@ self.addEventListener('push', (event) => {
     const title = data.title || 'Circus Crier Alert';
     const options = {
         body: data.body || 'Time to take your scheduled Elixir.',
-        // NOTE: Use a simple, robust path for icons until confirmed.
-        icon: '/favicon.ico', // Assuming you have a favicon at the root
-        badge: '/favicon.ico',
+        icon: '/alchemist.jpg',
+        badge: '/alchemist.jpg',
         data: {
             url: data.url || '/dashboard',
             time: new Date().toISOString(),
