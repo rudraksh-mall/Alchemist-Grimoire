@@ -2,6 +2,7 @@ import { DoseLog } from "../models/doseLog.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import { analyzeAndPredictAdherence } from '../services/prediction.service.js'; // Import the new AI service
 
 // Log a dose action (taken, missed, snoozed)
 const createDoseLog = asyncHandler(async (req, res) => {
@@ -23,7 +24,7 @@ const createDoseLog = asyncHandler(async (req, res) => {
     .json(new ApiResponse(201, doseLog, "Dose log created successfully"));
 });
 
-// REVISED: updateDoseLog (Add logic for actualTime and Snooze)
+
 const updateDoseLog = asyncHandler(async (req, res) => {
   const { logId } = req.params;
   const { status, notes, snoozeDurationMinutes } = req.body; // status, notes, AND snooze duration
@@ -34,11 +35,10 @@ const updateDoseLog = asyncHandler(async (req, res) => {
 
   let updateFields = { status, notes };
 
-  if (status === "taken") {
+  if (status === "taken" || status === "skipped" || status === "missed") {
     updateFields.actualTime = new Date();
   }
 
-  // 🎯 FIX: Snooze Logic
   if (status === "snoozed") {
     const dose = await DoseLog.findOne({ _id: logId, userId: req.user._id });
     if (!dose) {
@@ -48,18 +48,18 @@ const updateDoseLog = asyncHandler(async (req, res) => {
     const currentScheduledTime = dose.scheduledFor.getTime(); // Get time in milliseconds
     const snoozeDelayMs = (snoozeDurationMinutes || 30) * 60 * 1000; // Default to 30 min
     const newScheduledTime = new Date(currentScheduledTime + snoozeDelayMs);
-    
+
     // Update the field to reschedule the dose
-    updateFields = { 
-        status: "pending", // Snoozing sets the status back to pending
-        scheduledFor: newScheduledTime 
+    updateFields = {
+      status: "pending", // Snoozing sets the status back to pending
+      scheduledFor: newScheduledTime,
     };
   }
 
   // Find the log and apply updates
   const doseLog = await DoseLog.findOneAndUpdate(
     { _id: logId, userId: req.user._id },
-    updateFields, 
+    updateFields,
     { new: true }
   );
 
@@ -86,46 +86,40 @@ const getDoseLogsBySchedule = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, doseLogs, "Dose logs retrieved successfully"));
 });
 
-// backend/src/controllers/doseLog.controller.js (Final Fix for getTodaysDoseLogs)
-
-// FIX: Correctly filter by today's date and current time
 const getTodaysDoseLogs = asyncHandler(async (req, res) => {
-  // 🎯 NEW LOG: Check if the route is hit at all
-  console.log(`[DoseLog Controller] Route /v1/dose-logs/today accessed by User: ${req.user._id}`);
-  
+  console.log(
+    `[DoseLog Controller] Route /v1/dose-logs/today accessed by User: ${req.user._id}`
+  );
+
   const userId = req.user._id;
-  
-  // 1. Calculate today's date boundaries in UTC (to match doseCreation.service.js)
-  // Get current date, then normalize it to UTC midnight (start of today)
+
+  // Calculate today's date boundaries in UTC (to match doseCreation.service.js)
   const startOfToday = new Date();
-  startOfToday.setUTCHours(0, 0, 0, 0);
+  startOfToday.setHours(0, 0, 0, 0);
 
   // Get start of tomorrow (end of today)
   const endOfToday = new Date(startOfToday);
-  endOfToday.setUTCDate(startOfToday.getUTCDate() + 1);
+  endOfToday.setDate(startOfToday.getDate() + 1);
 
-  // 2. Query for pending logs scheduled for TODAY AND the CURRENT MOMENT (or later)
+  // Query for pending logs scheduled for TODAY AND the CURRENT MOMENT (or later)
   const logs = await DoseLog.find({
     userId,
     status: "pending",
-    // 🎯 FINAL ROBUST FIX: Ensure the dose is scheduled for today's calendar day
     scheduledFor: {
       $gte: new Date(Date.now() - 60000), // Future or within the last 60 seconds (safe buffer)
-      $lt: endOfToday, 
-    }
+      $lt: endOfToday,
+    },
   })
     .populate({
       path: "scheduleId",
-      // CRITICAL CHECK: Ensure these fields are correct in your MedicationSchedule model!
       select: "name dosage color",
     })
     .sort({ scheduledFor: 1 }); // Sort by time ascending
 
-  // 3. Removed redundant client-side filtering. MongoDB handles the future-time check.
+  console.log(
+    `[Dose Log Debug] Found ${logs.length} upcoming doses for client.`
+  );
 
-  console.log(`[Dose Log Debug] Found ${logs.length} upcoming doses for client.`);
-  
-  // 🎯 NEW LOG: Output the entire response array to the console
   console.log("[Dose Log Response Data]", logs);
 
   return res.json(
@@ -133,20 +127,36 @@ const getTodaysDoseLogs = asyncHandler(async (req, res) => {
   );
 });
 
-// NEW FUNCTION: getAdherenceStats (for AdherenceChart.jsx)
+const getAllDoseLogs = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+
+  const doseLogs = await DoseLog.find({ userId })
+    .populate({
+      path: "scheduleId",
+      select: "name dosage color",
+    })
+    .sort({ scheduledFor: -1 }); // Sort newest first for history
+
+  return res.json(
+    new ApiResponse(200, doseLogs, "All dose logs retrieved successfully")
+  );
+});
+// getAdherenceStats
 const getAdherenceStats = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const now = new Date();
   const thirtyDaysAgo = new Date(now.setDate(now.getDate() - 30));
 
-  // --- 1. Calculate Overall Statistics (for Pie Chart) ---
+  // Calculate Overall Statistics (for Pie Chart)
   // We use the aggregation pipeline to get counts for only COMPLETED statuses
   const statsPipeline = [
-    { $match: { 
-        userId, 
+    {
+      $match: {
+        userId,
         scheduledFor: { $gte: thirtyDaysAgo },
-        status: { $in: ["taken", "missed", "skipped"] } // Filter for completed actions
-    } },
+        status: { $in: ["taken", "missed", "skipped"] }, // Filter for completed actions
+      },
+    },
     {
       $group: {
         _id: "$status",
@@ -161,26 +171,29 @@ const getAdherenceStats = asyncHandler(async (req, res) => {
   const missedDoses = results.find((r) => r._id === "missed")?.count || 0;
   const skippedDoses = results.find((r) => r._id === "skipped")?.count || 0;
 
-  // 🎯 FIX: Calculate total completed doses for the denominator
   const totalCompletedDoses = takenDoses + missedDoses + skippedDoses;
 
   const adherenceRate =
-    totalCompletedDoses > 0 ? Math.round((takenDoses / totalCompletedDoses) * 100) : 0;
+    totalCompletedDoses > 0
+      ? Math.round((takenDoses / totalCompletedDoses) * 100)
+      : 0;
 
-  // --- 2. Calculate Weekly Trend (for Line Chart) ---
+  // Calculate Weekly Trend (for Line Chart)
   const weeklyTrendPipeline = [
-    // 🎯 CRITICAL FIX: Match only COMPLETED doses first to get accurate weekly totals
-    { $match: { 
-        userId, 
+    // Match only COMPLETED doses first to get accurate weekly totals
+    {
+      $match: {
+        userId,
         scheduledFor: { $gte: thirtyDaysAgo },
-        status: { $in: ["taken", "missed", "skipped"] } // Only include completed doses
-    } },
+        status: { $in: ["taken", "missed", "skipped"] }, // Only include completed doses
+      },
+    },
     {
       $group: {
         // Group by week of the year
         _id: { $isoWeek: "$scheduledFor" },
         // Now 'total' correctly represents total COMPLETED doses for the week
-        total: { $sum: 1 }, 
+        total: { $sum: 1 },
         taken: { $sum: { $cond: [{ $eq: ["$status", "taken"] }, 1, 0] } },
       },
     },
@@ -213,10 +226,52 @@ const getAdherenceStats = asyncHandler(async (req, res) => {
   );
 });
 
+// AI ADHERENCE PREDICTION ENDPOINT
+const getAdherencePrediction = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+
+    // Find the next upcoming pending dose (required for prediction context)
+    const nextDose = await DoseLog.findOne({
+        userId,
+        status: 'pending',
+        scheduledFor: { $gt: new Date(Date.now() - 60000) } // Scheduled for the immediate future
+    })
+    .populate({
+        path: 'scheduleId',
+        select: 'name dosage'
+    })
+    .sort({ scheduledFor: 1 }); // Get the soonest one
+
+    if (!nextDose || !nextDose.scheduleId) {
+        return res.json(new ApiResponse(
+            200,
+            { summary: "No upcoming doses found. Relax, Alchemist!", riskLevel: "LOW", proactiveNudge: null },
+            "Prediction successful."
+        ));
+    }
+
+    // Format the necessary data for the AI service
+    const upcomingDoseDetails = {
+        name: nextDose.scheduleId.name,
+        dosage: nextDose.scheduleId.dosage,
+        scheduledFor: nextDose.scheduledFor,
+        doseId: nextDose._id // Pass the ID for potential nudging functionality later
+    };
+
+    // Call the AI Prediction Service (The Mystic Fortune Teller)
+    const prediction = await analyzeAndPredictAdherence(userId, upcomingDoseDetails);
+
+    return res.json(
+        new ApiResponse(200, prediction, "Prediction successful.")
+    );
+});
+
 export {
   createDoseLog,
   updateDoseLog,
   getDoseLogsBySchedule,
   getTodaysDoseLogs,
   getAdherenceStats,
+  getAllDoseLogs,
+  getAdherencePrediction,
 };

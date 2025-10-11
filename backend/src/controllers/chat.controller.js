@@ -1,5 +1,3 @@
-// backend/src/controllers/chat.controller.js (Final Stable Version)
-
 import { GoogleGenAI } from "@google/genai";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
@@ -13,9 +11,10 @@ const sendMessage = asyncHandler(async (req, res) => {
   const { message } = req.body;
   const userId = req.user._id;
 
-  if (!message) throw new ApiError(400, "Message content is required.");
+  // Assuming your authentication middleware attaches user details like fullName
+  const userFullName = req.user.fullName || "Esteemed Alchemist";
 
-  //  1. DATA RETRIEVAL
+  if (!message) throw new ApiError(400, "Message content is required."); //  DATA RETRIEVAL
 
   const schedules = await MedicationSchedule.find({ userId }).select(
     "name dosage frequency times startDate"
@@ -31,28 +30,35 @@ const sendMessage = asyncHandler(async (req, res) => {
     activeSchedules: schedules,
     recentDoseHistory: recentLogs,
     currentDate: new Date().toISOString(),
-  };
-
-  //  PROMPT CONSTRUCTION
+  }; // PROMPT CONSTRUCTION
 
   const systemInstruction =
-    "You are the 'Mystic Fortune Teller,' an AI health assistant for circus performers. Your tone must be mystical, encouraging, and supportive. Use the provided data to answer the user's questions about their medicine schedule and adherence.";
+    "You are the 'Mystic Fortune Teller,' a wise and helpful health assistant. Your core mission is to analyze the user's detailed medication schedule and dosage history (the Grimoire data) to provide concise, direct, and actionable answers to their questions. Prioritize clarity over extensive mystical language. Frame your advice with the app's theme (elixirs, potions) but ensure the actual health/schedule information is delivered in plain, simple English.";
 
-  const userPrompt = `User Question: "${message}" // ⬅️ FIXED QUOTES
-        Here is the user's current health data:
-        - Active Schedules: ${JSON.stringify(context.activeSchedules)}
-        - Recent Doses(Last 5): ${JSON.stringify(context.recentDoseHistory)}
+  const userPrompt = `
+Greetings, ${userFullName}. Analyze the following Grimoire data to answer the user's question clearly and concisely.
 
-        Answer the user's question based ONLY on the data provided, using your mystical persona. If a dose was missed, gently remind the user of the importance of consistency.
-    `;
+User Question: "${message}"
 
-  // --- 3. AI GENERATION ---
+--- Grimoire Data for Analysis ---
+- User Name: ${userFullName} 
+- Active Schedules: ${JSON.stringify(context.activeSchedules)}
+- Recent Dose History (Last 5): ${JSON.stringify(context.recentDoseHistory)}
+- Current Date/Time: ${context.currentDate}
+
+Task: Answer the user's question.
+1. SCHEDULE/DOSE QUESTION: Answer directly using the supplied data. Use bullet points for clarity if listing items (e.g., "You need to take...").
+2. GENERAL HEALTH/SAFETY QUESTION: Use your general knowledge and the Google Search tool (if necessary) to provide a factual, simple answer.
+3. CONCISE PERSONA: Begin with a brief mystical greeting (1 sentence maximum) and then deliver the core answer in simple, direct language. Do not write long paragraphs or generate unnecessary lore. Maintain the Mystic Fortune Teller persona in the final response.
+`; //  AI GENERATION
+
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       config: {
         systemInstruction: systemInstruction,
+        tools: [{ google_search: {} }],
       },
     });
 

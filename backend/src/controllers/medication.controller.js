@@ -1,18 +1,20 @@
 import { User } from "../models/user.model.js";
 import { createInitialDoses } from "../services/doseCreation.service.js";
-import { createCalendarEvent } from "../services/calendar.service.js";
+import {
+  createCalendarEvent,
+  deleteCalendarEvent,
+} from "../services/calendar.service.js";
 import { MedicationSchedule } from "../models/medicationSchedule.model.js";
 import { DoseLog } from "../models/doseLog.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 
-// REVISED: createMedicationSchedule (WITH DOSE CREATION INTEGRATION)
 const createMedicationSchedule = asyncHandler(async (req, res) => {
   const { name, dosage, frequency, times, startDate, endDate, notes } =
     req.body;
 
-  // --- 1. Validation ---
+  // Validation
   if (
     !name ||
     !dosage ||
@@ -27,7 +29,7 @@ const createMedicationSchedule = asyncHandler(async (req, res) => {
     );
   }
 
-  // --- 2. Create Schedule in MongoDB ---
+  // Create Schedule in MongoDB
   const schedule = await MedicationSchedule.create({
     name,
     dosage,
@@ -39,10 +41,10 @@ const createMedicationSchedule = asyncHandler(async (req, res) => {
     userId: req.user._id,
   });
 
-  // --- 3. Create Initial Dose Logs ---
+  // Create Initial Dose Logs
   await createInitialDoses(schedule);
 
-  // --- 4. GOOGLE CALENDAR SYNC (Showstopper Feature) ---
+  // GOOGLE CALENDAR SYNC
 
   // Fetch the user's Google Refresh Token and Timezone (needed for event creation)
   const user = await User.findById(req.user._id).select(
@@ -57,7 +59,7 @@ const createMedicationSchedule = asyncHandler(async (req, res) => {
         user.googleRefreshToken
       );
 
-      // Optional: Save the Google Event ID back to the schedule in MongoDB
+      // Save the Google Event ID back to the schedule in MongoDB
       await MedicationSchedule.findByIdAndUpdate(schedule._id, {
         googleEventId: eventId,
       });
@@ -74,7 +76,7 @@ const createMedicationSchedule = asyncHandler(async (req, res) => {
     }
   }
 
-  // --- 5. Final Response ---
+  // Final Response
   return res
     .status(201)
     .json(
@@ -140,20 +142,51 @@ const updateMedicationSchedule = asyncHandler(async (req, res) => {
 
 // Delete a medication schedule by ID
 const deleteMedicationSchedule = asyncHandler(async (req, res) => {
-  const { scheduleId } = req.params;
-  const schedule = await MedicationSchedule.findOneAndDelete({
+  const { scheduleId } = req.params; // Find the schedule BEFORE deletion to get the Google Event ID
+  const schedule = await MedicationSchedule.findOne({
     _id: scheduleId,
     userId: req.user._id,
-  });
+  }).select("googleEventId"); // Only fetch the ID we need
+
   if (!schedule) {
     throw new ApiError(404, "Medication schedule not found");
   }
-  // Optionally, delete associated dose logs
+
+  // GOOGLE CALENDAR SYNC DELETION
+  // Check if a Google Event ID exists on the schedule
+  if (schedule.googleEventId) {
+    // Fetch the user's refresh token needed for the deletion service
+    const user = await User.findById(req.user._id).select("googleRefreshToken");
+
+    if (user && user.googleRefreshToken) {
+      try {
+        // Call the new service to delete the event
+        await deleteCalendarEvent(
+          schedule.googleEventId,
+          user.googleRefreshToken
+        );
+      } catch (syncError) {
+        // Log the error but DO NOT crash the server (non-critical feature failure)
+        console.error(
+          "[Google Sync ERROR] Failed to execute calendar deletion:",
+          syncError.message
+        );
+      }
+    }
+  }
+  // Delete from MongoDB
+  await MedicationSchedule.deleteOne({ _id: scheduleId, userId: req.user._id });
+  // Delete associated dose logs
+
   await DoseLog.deleteMany({ scheduleId: scheduleId });
   return res
     .status(200)
     .json(
-      new ApiResponse(200, null, "Medication schedule deleted successfully")
+      new ApiResponse(
+        200,
+        null,
+        "Medication schedule and associated Google event deleted successfully"
+      )
     );
 });
 

@@ -13,7 +13,7 @@ export const sendEmail = async ({ to, subject, text, html }) => {
     console.log(`📩 Email sent successfully to ${to}. Message ID: ${info.messageId}`);
     return true;
   } catch (error) {
-    console.error(`❌ Email send failed for ${to}:`, error.message);
+    console.error(` Email send failed for ${to}:`, error.message);
     return false; // Return false on failure
   }
 };

@@ -10,21 +10,20 @@ import { app } from "./app.js";
 
 import { startCronJobs } from "./db/cron.js";
 
-
 const PORT = process.env.PORT || 8000;
 
 connectDB()
-.then(() => {
+  .then(() => {
     app.on("error", (error) => {
-        console.log("ERRR: ", error);
-        throw error;
+      console.log("ERRR: ", error);
+      throw error;
     });
     app.listen(process.env.PORT || 8000, () => {
-        console.log(`✅ Server is running on port ${process.env.PORT || 8000}`);
-        // Start cron jobs after the server is up and running
-        startCronJobs();
-    })
-})
-.catch((error) => {
+      console.log(`✅ Server is running on port ${process.env.PORT || 8000}`);
+      // Start cron jobs after the server is up and running
+      startCronJobs();
+    });
+  })
+  .catch((error) => {
     console.log("❌ MONGODB connection FAILED:", error);
-})
+  });
