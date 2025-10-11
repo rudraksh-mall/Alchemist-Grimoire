@@ -107,12 +107,12 @@ export function Sidebar() {
         <div className="flex items-center space-x-3 mb-4">
           <div className="w-8 h-8 bg-sidebar-primary rounded-full flex items-center justify-center">
             <span className="text-sidebar-primary-foreground text-sm font-medium">
-              {user?.name?.charAt(0) || "A"}
+              {user?.fullName?.charAt(0) || "A"}
             </span>
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-sidebar-foreground truncate">
-              {user?.name || "Mystical Alchemist"}
+              {user?.fullName || "Mystical Alchemist"}
             </p>
             <p className="text-xs text-sidebar-foreground/60 truncate">
               {user?.email || "user@alchemist.com"}

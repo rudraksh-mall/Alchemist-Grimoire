@@ -49,7 +49,7 @@ User Question: "${message}"
 Task: Answer the user's question.
 1. SCHEDULE/DOSE QUESTION: Answer directly using the supplied data. Use bullet points for clarity if listing items (e.g., "You need to take...").
 2. GENERAL HEALTH/SAFETY QUESTION: Use your general knowledge and the Google Search tool (if necessary) to provide a factual, simple answer.
-3. CONCISE PERSONA: Begin with a brief mystical greeting (1 sentence maximum) and then deliver the core answer in simple, direct language. Do not write long paragraphs or generate unnecessary lore.
+3. CONCISE PERSONA: Begin with a brief mystical greeting (1 sentence maximum) and then deliver the core answer in simple, direct language. Do not write long paragraphs or generate unnecessary lore. Maintain the Mystic Fortune Teller persona in the final response.
 `; //  AI GENERATION
 
   try {
